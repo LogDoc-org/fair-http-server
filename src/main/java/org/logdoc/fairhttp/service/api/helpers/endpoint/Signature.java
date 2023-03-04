@@ -17,14 +17,14 @@ class Signature implements Comparable<Signature> {
     private final Pattern pattern;
     private final List<String> names;
 
-    static Signature ofRoute(final String string) {
-        return new Signature(string, string.contains("/([^") ? Pattern.compile(string) : null);
+    static Signature ofRoute(final String string, final List<String> names) {
+        return new Signature(string, string.contains("/([^") ? Pattern.compile(string) : null, names);
     }
 
-    private Signature(final String string, final Pattern pattern) {
+    private Signature(final String string, final Pattern pattern, final List<String> names) {
         this.string = string;
         this.pattern = pattern;
-        this.names = null;
+        this.names = names;
 
         int cnt = 0;
         for (int i = 0; i < string.length(); i++)

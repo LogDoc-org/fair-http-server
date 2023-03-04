@@ -22,7 +22,7 @@ public class Endpoint implements Comparable<Endpoint> {
 
     public Endpoint(final DynamicRoute route) {
         method = route.method.trim().toUpperCase();
-        signature = Signature.ofRoute(route.endpoint);
+        signature = Signature.ofRoute(route.endpoint, route.pathVarsNames);
         invoker = new Invoker(route);
     }
 
