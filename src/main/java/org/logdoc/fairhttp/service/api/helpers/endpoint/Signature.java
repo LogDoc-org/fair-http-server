@@ -17,23 +17,6 @@ class Signature implements Comparable<Signature> {
     private final Pattern pattern;
     private final List<String> names;
 
-    static Signature ofRoute(final String string, final List<String> names) {
-        return new Signature(string, string.contains("/([^") ? Pattern.compile(string) : null, names);
-    }
-
-    private Signature(final String string, final Pattern pattern, final List<String> names) {
-        this.string = string;
-        this.pattern = pattern;
-        this.names = names;
-
-        int cnt = 0;
-        for (int i = 0; i < string.length(); i++)
-            if (string.charAt(i) == '/')
-                cnt++;
-
-        weight = cnt;
-    }
-
     Signature(final String raw) {
         final String proper = (raw.trim() + (raw.trim().endsWith("/") ? "" : "/")).replaceAll("/{2,}", "/");
 
