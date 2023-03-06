@@ -104,24 +104,23 @@ public class Server implements FairHttpServer {
         for (final Endpoint e : endpoints)
             if (e.match(request.method, hardPath)) {
                 logger.info(request.toString());
+                final Function<Throwable, Void> errorHandler = t -> {
+                    logger.error(t.getMessage(), t);
+                    final Http.Response response = Http.Response.ServerError();
+                    if (t.getMessage() != null)
+                        response.setPayload(t.getMessage().getBytes(StandardCharsets.UTF_8), MimeType.TEXTPLAIN);
+
+                    driver.response(response);
+                    return null;
+                };
 
                 if (e.isAsync()) {
                     CompletableFuture.runAsync(() -> e.handleAsync(request)
                             .thenAccept(driver::response)
-                            .exceptionally(t -> {
-                                final Http.Response response = Http.Response.ServerError();
-                                if (t != null && t.getMessage() != null)
-                                    response.setPayload(t.getMessage().getBytes(StandardCharsets.UTF_8), MimeType.TEXTPLAIN);
-
-                                driver.response(response);
-                                return null;
-                            }));
+                            .exceptionally(errorHandler));
                 } else
                     CompletableFuture.runAsync(() -> driver.response(e.handle(request)))
-                            .exceptionally(t -> {
-                                logger.error(t.getMessage(), t);
-                                return null;
-                            });
+                            .exceptionally(errorHandler);
 
                 return;
             }
@@ -153,7 +152,7 @@ public class Server implements FairHttpServer {
     }
 
     @Override
-    public void setupDynamicEndpoints(final Collection<DynamicRoute> routes) {
+    public synchronized void setupDynamicEndpoints(final Collection<DynamicRoute> routes) {
         Endpoint ep;
         for (final DynamicRoute pretend : routes)
             try {
@@ -166,7 +165,7 @@ public class Server implements FairHttpServer {
     }
 
     @Override
-    public void setupConfigEndpoints(final Collection<String> raw) {
+    public synchronized void setupConfigEndpoints(final Collection<String> raw) {
         Endpoint ep;
         for (final String pretend : raw)
             try {

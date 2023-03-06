@@ -2,6 +2,8 @@ package org.logdoc.fairhttp.service;
 
 import com.typesafe.config.Config;
 import com.typesafe.config.ConfigFactory;
+import com.typesafe.config.ConfigResolveOptions;
+import org.logdoc.fairhttp.service.api.helpers.Preloaded;
 import org.logdoc.fairhttp.service.http.Server;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -22,8 +24,9 @@ import java.util.stream.Collectors;
 public class StartFairServer {
     private static final Logger logger = LoggerFactory.getLogger("FairServer Starter");
 
+    @SuppressWarnings("unchecked")
     public static void main(final String[] args) {
-        final Config c = ConfigFactory.defaultApplication().withFallback(ConfigFactory.defaultReference());
+        final Config c = ConfigFactory.defaultApplication().withFallback(ConfigFactory.defaultReference()).resolve(ConfigResolveOptions.defaults());
         DI.init(c);
 
         final List<String> endpoints = new ArrayList<>(16);
@@ -46,5 +49,14 @@ public class StartFairServer {
         DI.bindProvider(Server.class, () -> s);
         s.setupConfigEndpoints(endpoints);
         s.start();
+
+        if (c.hasPath("fair.preload.load"))
+            c.getStringList("fair.preload.load").forEach(lc -> {
+                try {
+                    DI.preload((Class<Preloaded>) Class.forName(lc));
+                } catch (final Exception e) {
+                    logger.error("Cant preload '" + lc + "' :: " + e.getMessage(), e);
+                }
+            });
     }
 }
