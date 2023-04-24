@@ -147,7 +147,7 @@ public class SocketDriver {
                                         .filter(s -> s.contains("="))
                                         .forEach(c -> {
                                             final int i = c.indexOf('=');
-                                            request.cookies.put(c.substring(0, i).trim(), c.substring(i + 1).trim());
+                                            request.cookies.put(c.substring(0, i).trim(), c.substring(i + 2, c.length() - 1).trim());
                                         });
                         }
 

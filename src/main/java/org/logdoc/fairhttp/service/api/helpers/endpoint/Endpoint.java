@@ -88,4 +88,8 @@ public class Endpoint implements Comparable<Endpoint> {
     public String toString() {
         return method + "\t" + signature;
     }
+
+    public boolean pathMatch(final String hardPath) {
+        return signature.matches(hardPath);
+    }
 }

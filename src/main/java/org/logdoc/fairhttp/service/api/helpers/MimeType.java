@@ -1,5 +1,7 @@
 package org.logdoc.fairhttp.service.api.helpers;
 
+import java.nio.charset.StandardCharsets;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.Map;
@@ -11,6 +13,7 @@ import java.util.Map;
  */
 public class MimeType {
 
+    private static final String TSPECIALS = "()<>@,;:/[]?=\\\"";
     public static MimeType FORM = of("application/x-www-form-urlencoded");
     public static MimeType JSON = of("application/json");
     public static MimeType TEXTPLAIN = of("text/plain");
@@ -18,21 +21,9 @@ public class MimeType {
     public static MimeType BINARY = of("application/octet-stream");
     public static MimeType XML = of("application/xml");
     public static MimeType MULTIPART = of("multipart/form-data");
-
     private String primaryType;
     private String subType;
     private ParamsList parameters;
-
-    private static final String TSPECIALS = "()<>@,;:/[]?=\\\"";
-
-    private static MimeType of(final String knownSpec) {
-        final MimeType mt = new MimeType();
-        mt.primaryType = knownSpec.substring(0, knownSpec.indexOf('/'));
-        mt.subType = knownSpec.substring(knownSpec.indexOf('/') + 1);
-        mt.setParameter("charset", "UTF-8");
-
-        return mt;
-    }
 
     public MimeType() {
         primaryType = "application";
@@ -56,6 +47,102 @@ public class MimeType {
             throw new Exception("Sub type is invalid.");
 
         parameters = new ParamsList();
+    }
+
+    private static MimeType of(final String knownSpec) {
+        final MimeType mt = new MimeType();
+        mt.primaryType = knownSpec.substring(0, knownSpec.indexOf('/'));
+        mt.subType = knownSpec.substring(knownSpec.indexOf('/') + 1);
+        mt.setParameter("charset", "UTF-8");
+
+        return mt;
+    }
+
+    private static boolean isTokenChar(final char c) {
+        return ((c > 040) && (c < 0177)) && (TSPECIALS.indexOf(c) < 0);
+    }
+
+    public static MimeType guessMime(final int[] head16bytes) {
+        if (head16bytes[0] == '<' && head16bytes[1] == 's' && head16bytes[2] == 'v' && head16bytes[3] == 'g' && head16bytes[4] == ' ')
+            return of("image/svg+xml");
+
+        if (head16bytes[0] == 'G' && head16bytes[1] == 'I' && head16bytes[2] == 'F' && head16bytes[3] == '8')
+            return of("image/gif");
+
+        if (head16bytes[0] == '#' && head16bytes[1] == 'd' && head16bytes[2] == 'e' && head16bytes[3] == 'f')
+            return of("image/x-bitmap");
+
+        if (head16bytes[0] == 0xCA && head16bytes[1] == 0xFE && head16bytes[2] == 0xBA && head16bytes[3] == 0xBE)
+            return of("application/java-vm");
+
+        if (head16bytes[0] == 0xAC && head16bytes[1] == 0xED)
+            return of("application/x-java-serialized-object");
+
+        if (head16bytes[0] == 0x2E && head16bytes[1] == 0x73 && head16bytes[2] == 0x6E && head16bytes[3] == 0x64)
+            return of("audio/basic");  // .au BE
+
+        if (head16bytes[0] == 0x64 && head16bytes[1] == 0x6E && head16bytes[2] == 0x73 && head16bytes[3] == 0x2E)
+            return of("audio/basic");  // .au LE
+
+        if (head16bytes[0] == 'R' && head16bytes[1] == 'I' && head16bytes[2] == 'F' && head16bytes[3] == 'F')
+            return of("audio/x-wav");
+
+        if (head16bytes[0] == '<') {
+            if (head16bytes[1] == '!'
+                    || ((head16bytes[1] == 'h' && (head16bytes[2] == 't' && head16bytes[3] == 'm' && head16bytes[4] == 'l' ||
+                    head16bytes[2] == 'e' && head16bytes[3] == 'a' && head16bytes[4] == 'd') ||
+                    (head16bytes[1] == 'b' && head16bytes[2] == 'o' && head16bytes[3] == 'd' && head16bytes[4] == 'y'))) ||
+                    ((head16bytes[1] == 'H' && (head16bytes[2] == 'T' && head16bytes[3] == 'M' && head16bytes[4] == 'L' ||
+                            head16bytes[2] == 'E' && head16bytes[3] == 'A' && head16bytes[4] == 'D') ||
+                            (head16bytes[1] == 'B' && head16bytes[2] == 'O' && head16bytes[3] == 'D' && head16bytes[4] == 'Y'))))
+                return of("text/html");
+
+            if (head16bytes[1] == '?' && head16bytes[2] == 'x' && head16bytes[3] == 'm' && head16bytes[4] == 'l' && head16bytes[5] == ' ')
+                return of("application/xml");
+        }
+
+        if (head16bytes[0] == 0xef && head16bytes[1] == 0xbb && head16bytes[2] == 0xbf && head16bytes[3] == '<' && head16bytes[4] == '?' && head16bytes[5] == 'x')
+            return of("application/xml");
+
+        if (head16bytes[0] == '!' && head16bytes[1] == ' ' && head16bytes[2] == 'X' && head16bytes[3] == 'P' && head16bytes[4] == 'M' && head16bytes[5] == '2')
+            return of("image/x-pixmap");
+
+        if (head16bytes[0] == 0xfe && head16bytes[1] == 0xff && head16bytes[2] == 0 && head16bytes[3] == '<' && head16bytes[4] == 0 && head16bytes[5] == '?' && head16bytes[6] == 0 && head16bytes[7] == 'x')
+            return of("application/xml");
+
+        if (head16bytes[0] == 0xff && head16bytes[1] == 0xfe && head16bytes[2] == '<' && head16bytes[3] == 0 && head16bytes[4] == '?' && head16bytes[5] == 0 && head16bytes[6] == 'x' && head16bytes[7] == 0)
+            return of("application/xml");
+
+        if (head16bytes[0] == 137 && head16bytes[1] == 80 && head16bytes[2] == 78 && head16bytes[3] == 71 && head16bytes[4] == 13 && head16bytes[5] == 10 && head16bytes[6] == 26 && head16bytes[7] == 10)
+            return of("image/png");
+
+        if (head16bytes[0] == 0xFF && head16bytes[1] == 0xD8 && head16bytes[2] == 0xFF) {
+            if (head16bytes[3] == 0xE0 || head16bytes[3] == 0xEE)
+                return of("image/jpeg");
+
+            if (head16bytes[3] == 0xE1 && head16bytes[6] == 'E' && head16bytes[7] == 'x' && head16bytes[8] == 'i' && head16bytes[9] == 'f' && head16bytes[10] == 0)
+                return of("image/jpeg");
+        }
+
+        if (head16bytes[0] == 0x00 && head16bytes[1] == 0x00 && head16bytes[2] == 0xfe && head16bytes[3] == 0xff && head16bytes[4] == 0 && head16bytes[5] == 0 && head16bytes[6] == 0 && head16bytes[7] == '<' &&
+                head16bytes[8] == 0 && head16bytes[9] == 0 && head16bytes[10] == 0 && head16bytes[11] == '?' &&
+                head16bytes[12] == 0 && head16bytes[13] == 0 && head16bytes[14] == 0 && head16bytes[15] == 'x')
+            return of("application/xml");
+
+        if (head16bytes[0] == 0xff && head16bytes[1] == 0xfe && head16bytes[2] == 0x00 && head16bytes[3] == 0x00 && head16bytes[4] == '<' && head16bytes[5] == 0 && head16bytes[6] == 0 && head16bytes[7] == 0 &&
+                head16bytes[8] == '?' && head16bytes[9] == 0 && head16bytes[10] == 0 && head16bytes[11] == 0 &&
+                head16bytes[12] == 'x' && head16bytes[13] == 0 && head16bytes[14] == 0 && head16bytes[15] == 0)
+            return of("application/xml");
+
+        final byte[] bytes = new byte[head16bytes.length];
+        for (int i = 0; i < bytes.length; i++) bytes[i] = (byte) head16bytes[i];
+
+        final String s = new String(bytes, StandardCharsets.UTF_8).replaceAll("\\s", "");
+
+        if (s.startsWith("{\"") || s.startsWith("[{") || s.startsWith("[\"") || s.matches("^\\[\\d.*"))
+            return of("application/json");
+
+        return BINARY;
     }
 
     private void parse(final String rawdata) throws Exception {
@@ -145,10 +232,6 @@ public class MimeType {
         return match(new MimeType(rawdata));
     }
 
-    private static boolean isTokenChar(final char c) {
-        return ((c > 040) && (c < 0177)) && (TSPECIALS.indexOf(c) < 0);
-    }
-
     private boolean isValidToken(final String s) {
         int len = s.length();
         if (len > 0) {
@@ -176,6 +259,68 @@ public class MimeType {
             parameters = new HashMap<>();
 
             parse(parameterList);
+        }
+
+        private static boolean isTokenChar(char c) {
+            return ((c > 040) && (c < 0177)) && (TSPECIALS.indexOf(c) < 0);
+        }
+
+        private static int skipWhiteSpace(String rawdata, int i) {
+            int length = rawdata.length();
+
+            while ((i < length) && Character.isWhitespace(rawdata.charAt(i)))
+                i++;
+
+            return i;
+        }
+
+        private static String quote(String value) {
+            boolean needsQuotes = false;
+
+            int length = value.length();
+            for (int i = 0; (i < length) && !needsQuotes; i++) {
+                needsQuotes = !isTokenChar(value.charAt(i));
+            }
+
+            if (needsQuotes) {
+                final StringBuilder buffer = new StringBuilder();
+                buffer.ensureCapacity((int) (length * 1.5));
+
+                buffer.append('"');
+
+                for (int i = 0; i < length; ++i) {
+                    char c = value.charAt(i);
+                    if ((c == '\\') || (c == '"'))
+                        buffer.append('\\');
+                    buffer.append(c);
+                }
+
+                buffer.append('"');
+
+                return buffer.toString();
+            }
+
+            return value;
+        }
+
+        private static String unquote(String value) {
+            int valueLength = value.length();
+            final StringBuilder buffer = new StringBuilder();
+            buffer.ensureCapacity(valueLength);
+
+            boolean escaped = false;
+            for (int i = 0; i < valueLength; ++i) {
+                char currentChar = value.charAt(i);
+                if (!escaped && (currentChar != '\\')) {
+                    buffer.append(currentChar);
+                } else if (escaped) {
+                    buffer.append(currentChar);
+                    escaped = false;
+                } else
+                    escaped = true;
+            }
+
+            return buffer.toString();
         }
 
         protected void parse(final String parameterList) throws Exception {
@@ -280,68 +425,6 @@ public class MimeType {
             return parameters.keySet();
         }
 
-        private static boolean isTokenChar(char c) {
-            return ((c > 040) && (c < 0177)) && (TSPECIALS.indexOf(c) < 0);
-        }
-
-        private static int skipWhiteSpace(String rawdata, int i) {
-            int length = rawdata.length();
-
-            while ((i < length) && Character.isWhitespace(rawdata.charAt(i)))
-                i++;
-
-            return i;
-        }
-
-        private static String quote(String value) {
-            boolean needsQuotes = false;
-
-            int length = value.length();
-            for (int i = 0; (i < length) && !needsQuotes; i++) {
-                needsQuotes = !isTokenChar(value.charAt(i));
-            }
-
-            if (needsQuotes) {
-                final StringBuilder buffer = new StringBuilder();
-                buffer.ensureCapacity((int) (length * 1.5));
-
-                buffer.append('"');
-
-                for (int i = 0; i < length; ++i) {
-                    char c = value.charAt(i);
-                    if ((c == '\\') || (c == '"'))
-                        buffer.append('\\');
-                    buffer.append(c);
-                }
-
-                buffer.append('"');
-
-                return buffer.toString();
-            }
-
-            return value;
-        }
-
-        private static String unquote(String value) {
-            int valueLength = value.length();
-            final StringBuilder buffer = new StringBuilder();
-            buffer.ensureCapacity(valueLength);
-
-            boolean escaped = false;
-            for (int i = 0; i < valueLength; ++i) {
-                char currentChar = value.charAt(i);
-                if (!escaped && (currentChar != '\\')) {
-                    buffer.append(currentChar);
-                } else if (escaped) {
-                    buffer.append(currentChar);
-                    escaped = false;
-                } else
-                    escaped = true;
-            }
-
-            return buffer.toString();
-        }
-
         public String toString() {
             final StringBuilder s = new StringBuilder();
 
@@ -350,78 +433,6 @@ public class MimeType {
 
             return s.toString();
         }
-    }
-
-    public static MimeType guessMime(final int[] head16bytes) {
-        if (head16bytes[0] == 'G' && head16bytes[1] == 'I' && head16bytes[2] == 'F' && head16bytes[3] == '8')
-            return of("image/gif");
-
-        if (head16bytes[0] == '#' && head16bytes[1] == 'd' && head16bytes[2] == 'e' && head16bytes[3] == 'f')
-            return of("image/x-bitmap");
-
-        if (head16bytes[0] == 0xCA && head16bytes[1] == 0xFE && head16bytes[2] == 0xBA && head16bytes[3] == 0xBE)
-            return of("application/java-vm");
-
-        if (head16bytes[0] == 0xAC && head16bytes[1] == 0xED)
-            return of("application/x-java-serialized-object");
-
-        if (head16bytes[0] == 0x2E && head16bytes[1] == 0x73 && head16bytes[2] == 0x6E && head16bytes[3] == 0x64)
-            return of("audio/basic");  // .au BE
-
-        if (head16bytes[0] == 0x64 && head16bytes[1] == 0x6E && head16bytes[2] == 0x73 && head16bytes[3] == 0x2E)
-            return of("audio/basic");  // .au LE
-
-        if (head16bytes[0] == 'R' && head16bytes[1] == 'I' && head16bytes[2] == 'F' && head16bytes[3] == 'F')
-            return of("audio/x-wav");
-
-        if (head16bytes[0] == '<') {
-            if (head16bytes[1] == '!'
-                    || ((head16bytes[1] == 'h' && (head16bytes[2] == 't' && head16bytes[3] == 'm' && head16bytes[4] == 'l' ||
-                    head16bytes[2] == 'e' && head16bytes[3] == 'a' && head16bytes[4] == 'd') ||
-                    (head16bytes[1] == 'b' && head16bytes[2] == 'o' && head16bytes[3] == 'd' && head16bytes[4] == 'y'))) ||
-                    ((head16bytes[1] == 'H' && (head16bytes[2] == 'T' && head16bytes[3] == 'M' && head16bytes[4] == 'L' ||
-                            head16bytes[2] == 'E' && head16bytes[3] == 'A' && head16bytes[4] == 'D') ||
-                            (head16bytes[1] == 'B' && head16bytes[2] == 'O' && head16bytes[3] == 'D' && head16bytes[4] == 'Y'))))
-                return of("text/html");
-
-            if (head16bytes[1] == '?' && head16bytes[2] == 'x' && head16bytes[3] == 'm' && head16bytes[4] == 'l' && head16bytes[5] == ' ')
-                return of("application/xml");
-        }
-
-        if (head16bytes[0] == 0xef && head16bytes[1] == 0xbb && head16bytes[2] == 0xbf && head16bytes[3] == '<' && head16bytes[4] == '?' && head16bytes[5] == 'x')
-            return of("application/xml");
-
-        if (head16bytes[0] == '!' && head16bytes[1] == ' ' && head16bytes[2] == 'X' && head16bytes[3] == 'P' && head16bytes[4] == 'M' && head16bytes[5] == '2')
-            return of("image/x-pixmap");
-
-        if (head16bytes[0] == 0xfe && head16bytes[1] == 0xff && head16bytes[2] == 0 && head16bytes[3] == '<' && head16bytes[4] == 0 && head16bytes[5] == '?' && head16bytes[6] == 0 && head16bytes[7] == 'x')
-            return of("application/xml");
-
-        if (head16bytes[0] == 0xff && head16bytes[1] == 0xfe && head16bytes[2] == '<' && head16bytes[3] == 0 && head16bytes[4] == '?' && head16bytes[5] == 0 && head16bytes[6] == 'x' && head16bytes[7] == 0)
-            return of("application/xml");
-
-        if (head16bytes[0] == 137 && head16bytes[1] == 80 && head16bytes[2] == 78 && head16bytes[3] == 71 && head16bytes[4] == 13 && head16bytes[5] == 10 && head16bytes[6] == 26 && head16bytes[7] == 10)
-            return of("image/png");
-
-        if (head16bytes[0] == 0xFF && head16bytes[1] == 0xD8 && head16bytes[2] == 0xFF) {
-            if (head16bytes[3] == 0xE0 || head16bytes[3] == 0xEE)
-                return of("image/jpeg");
-
-            if (head16bytes[3] == 0xE1 && head16bytes[6] == 'E' && head16bytes[7] == 'x' && head16bytes[8] == 'i' && head16bytes[9] == 'f' && head16bytes[10] == 0)
-                return of("image/jpeg");
-        }
-
-        if (head16bytes[0] == 0x00 && head16bytes[1] == 0x00 && head16bytes[2] == 0xfe && head16bytes[3] == 0xff && head16bytes[4] == 0 && head16bytes[5] == 0 && head16bytes[6] == 0 && head16bytes[7] == '<' &&
-                head16bytes[8] == 0 && head16bytes[9] == 0 && head16bytes[10] == 0 && head16bytes[11] == '?' &&
-                head16bytes[12] == 0 && head16bytes[13] == 0 && head16bytes[14] == 0 && head16bytes[15] == 'x')
-            return of("application/xml");
-
-        if (head16bytes[0] == 0xff && head16bytes[1] == 0xfe && head16bytes[2] == 0x00 && head16bytes[3] == 0x00 && head16bytes[4] == '<' && head16bytes[5] == 0 && head16bytes[6] == 0 && head16bytes[7] == 0 &&
-                head16bytes[8] == '?' && head16bytes[9] == 0 && head16bytes[10] == 0 && head16bytes[11] == 0 &&
-                head16bytes[12] == 'x' && head16bytes[13] == 0 && head16bytes[14] == 0 && head16bytes[15] == 0)
-            return of("application/xml");
-
-        return BINARY;
     }
 
 }

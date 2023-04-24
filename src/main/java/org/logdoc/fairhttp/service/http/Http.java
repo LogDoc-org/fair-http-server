@@ -87,7 +87,17 @@ public class Http {
         private byte[] body;
 
         {
-            headers = new HashMap<>(16);
+            headers = new HashMap<>(16) {
+                @Override
+                public String put(final String key, final String value) {
+                    return super.put(key.toUpperCase(), value);
+                }
+
+                @Override
+                public String get(final Object key) {
+                    return super.get(String.valueOf(key).toUpperCase());
+                }
+            };
             cookies = new HashMap<>(8);
             query = new HashMap<>(8);
             knownBodyLength = -1;
@@ -315,6 +325,10 @@ public class Http {
         public String header(final String header) {
             return headers.get(header);
         }
+
+        public boolean hasHeader(final String header) {
+            return !isEmpty(headers.get(header));
+        }
     }
 
     public static class Response {
@@ -437,11 +451,13 @@ public class Http {
                 if (!isEmpty(e.getValue()) && !isEmpty(e.getKey())) {
                     os.write((e.getKey() + ": " + e.getValue()).getBytes(StandardCharsets.UTF_8));
                     os.write(FEED);
+                    logger.debug("Response header '" + e.getKey() + "' :: '"+e.getValue()+"'");
                 }
 
             for (final Cookie c : cookies) {
                 os.write((Headers.ResponseCookies + ": " + c).getBytes(StandardCharsets.UTF_8));
                 os.write(FEED);
+                logger.debug("Response cookie '" + c + "'");
             }
 
             os.write(FEED);
@@ -451,6 +467,7 @@ public class Http {
             else if (promise != null)
                 promise.accept(os);
 
+            logger.debug("Response written");
             os.flush();
         }
 
@@ -464,6 +481,13 @@ public class Http {
                 for (final Cookie c : cookies)
                     if (c != null)
                         this.cookies.add(c);
+
+            return this;
+        }
+
+        public Response withHeader(final String name, final String value) {
+            if (!isEmpty(value) && !isEmpty(name))
+                header(name.trim(), value.trim());
 
             return this;
         }

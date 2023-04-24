@@ -23,5 +23,9 @@ public interface Headers {
             SecWebsocketProtocols = "Sec-WebSocket-Protocol",
             SecWebsocketAccept = "Sec-WebSocket-Accept",
             Attachment = "attachment",
-            FormData = "form-data";
+            FormData = "form-data",
+            CorsOrigin = "Access-Control-Allow-Origin",
+            CorsMethod = "Access-Control-Allow-Methods",
+            CorsHeaders = "Access-Control-Allow-Headers",
+            CorsCreds = "Access-Control-Allow-Credentials";
 }

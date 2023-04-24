@@ -34,8 +34,10 @@ public class Server implements FairHttpServer {
     private final SortedSet<Endpoint> endpoints;
     private final AtomicInteger densityFactor, threadCount;
     private final List<FThread> running;
-    private final Config config;
+    private final int port;
     private final Function<String, Http.Response> assets;
+    private final CORS cors;
+
 
     public Server(final Config config) {
         synchronized (Server.class) {
@@ -45,7 +47,7 @@ public class Server implements FairHttpServer {
             backRef = this;
         }
 
-        this.config = config;
+        port = config.getInt(ConfigPath.PORT);
 
         this.endpoints = new TreeSet<>();
 
@@ -56,11 +58,12 @@ public class Server implements FairHttpServer {
 
         final String dir = config.hasPath(ConfigPath.STATIC_DIR) ? config.getString(ConfigPath.STATIC_DIR) : null;
         assets = isEmpty(dir) ? new NoStatics() : new DirectRead();
+        cors = new CORS(config);
     }
 
     public void start() {
         new Thread(() -> {
-            try (final ServerSocket socket = new ServerSocket(config.getInt(ConfigPath.PORT))) {
+            try (final ServerSocket socket = new ServerSocket(port)) {
                 Socket child;
                 LOOP:
                 do {
@@ -90,7 +93,7 @@ public class Server implements FairHttpServer {
             }
         }.start();
         try {
-            logger.info("Listen at:\thttp://" + Inet4Address.getLocalHost().getHostAddress() + ":" + config.getInt(ConfigPath.PORT));
+            logger.info("Listen at:\thttp://" + Inet4Address.getLocalHost().getHostAddress() + ":" + port);
         } catch (final Exception e) {
             logger.error("Cant get local host: " + e.getMessage(), e);
         }
@@ -100,6 +103,8 @@ public class Server implements FairHttpServer {
         final Http.Request request = driver.request();
 
         final String hardPath = request.path();
+
+        boolean hasMatchPath = false;
 
         for (final Endpoint e : endpoints)
             if (e.match(request.method, hardPath)) {
@@ -116,16 +121,26 @@ public class Server implements FairHttpServer {
 
                 if (e.isAsync()) {
                     CompletableFuture.runAsync(() -> e.handleAsync(request)
+                            .thenApply(rsp -> cors.wrap(request, rsp))
                             .thenAccept(driver::response)
                             .exceptionally(errorHandler));
                 } else
-                    CompletableFuture.runAsync(() -> driver.response(e.handle(request)))
+                    CompletableFuture.runAsync(() -> driver.response(cors.wrap(request, e.handle(request))))
                             .exceptionally(errorHandler);
 
                 return;
-            }
+            } else if (!hasMatchPath && e.pathMatch(hardPath))
+                hasMatchPath = true;
 
-        CompletableFuture.runAsync(() -> driver.response(assets.apply(request.path())));
+        if (hasMatchPath && request.method.equals("OPTIONS")) {
+            driver.response(cors.wrap(request, Http.Response.NoContent()));
+            return;
+        }
+
+        if (request.method.equals("GET"))
+            CompletableFuture.runAsync(() -> driver.response(assets.apply(request.path())));
+        else
+            driver.response(Http.Response.NotFound());
     }
 
     boolean mayClose() {
