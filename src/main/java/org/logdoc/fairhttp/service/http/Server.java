@@ -63,7 +63,7 @@ public class Server implements FairHttpServer {
         running = new ArrayList<>(16);
 
         final Config staticsCfg = config.hasPath("fair.http.statics") && !config.getIsNull("fair.http.statics") ? config.getConfig("fair.http.statics") : null;
-        final String dir = staticsCfg != null && staticsCfg.hasPath("root") && !staticsCfg.getIsNull("root") ? notNull(config.getString("root")) : null;
+        final String dir = staticsCfg != null && staticsCfg.hasPath("root") && !staticsCfg.getIsNull("root") ? notNull(staticsCfg.getString("root")) : null;
 
         if (isEmpty(dir))
             assets = new NoStatics();
