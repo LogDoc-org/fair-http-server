@@ -17,7 +17,6 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 
-import static org.logdoc.fairhttp.service.DI.gain;
 import static org.logdoc.fairhttp.service.tools.Strings.notNull;
 
 /**
@@ -31,19 +30,19 @@ public class BundledRead extends StaticRead {
     private final ClassLoader cl;
     private final String prefix;
 
-    public BundledRead() {
-        super(gain(Config.class).getConfig("statics"));
+    public BundledRead(final Config staticsCfg, final String prefix) {
+        super(staticsCfg);
 
         cl = BundledRead.class.getClassLoader();
 
         try {
-            prefix = notNull(gain(Config.class).getConfig("statics").getString(rootPrm).replace(PlaceHolder, ""), "/");
+            this.prefix = notNull(prefix.replace(PlaceHolder, ""), "/");
         } catch (final ConfigException e) {
             logger.error(e.getMessage(), e);
             throw new IllegalStateException(e);
         }
 
-        if (!prefix.equals("/") && cl.getResource(prefix + "/") == null)
+        if (!this.prefix.equals("/") && cl.getResource(prefix + "/") == null)
             throw new IllegalStateException("Unknown static root resource: " + prefix);
     }
 

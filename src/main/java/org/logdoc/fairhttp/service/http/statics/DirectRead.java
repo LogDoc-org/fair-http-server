@@ -20,8 +20,6 @@ import java.util.Objects;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
-import static org.logdoc.fairhttp.service.DI.gain;
-
 /**
  * @author Denis Danilin | me@loslobos.ru
  * 04.03.2023 13:30
@@ -32,17 +30,17 @@ public class DirectRead extends StaticRead {
 
     private final Path root;
 
-    public DirectRead() {
-        super(gain(Config.class).getConfig("statics"));
+    public DirectRead(final Config staticsCfg, final String root) {
+        super(staticsCfg);
 
         try {
-            root = Paths.get(gain(Config.class).getConfig("statics").getString(rootPrm));
+            this.root = Paths.get(root);
         } catch (final ConfigException e) {
             logger.error(e.getMessage(), e);
             throw new IllegalStateException(e);
         }
 
-        if (!Files.exists(root))
+        if (!Files.exists(this.root))
             throw new IllegalStateException("root dir doesnt exists");
     }
 

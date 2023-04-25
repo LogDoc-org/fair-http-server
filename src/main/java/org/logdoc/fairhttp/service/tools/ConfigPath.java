@@ -12,7 +12,4 @@ public interface ConfigPath {
     String CORS_METHODS = "methods";
     String CORS_HEADERS = "headers";
     String CORS_CREDS = "allow_credentials";
-    String STATIC_DIR = "fair.http.static_root";
-    String AUTO_INDEX = "fair.http.auto_index";
-    String INDEX_FILE = "fair.http.index_file";
 }

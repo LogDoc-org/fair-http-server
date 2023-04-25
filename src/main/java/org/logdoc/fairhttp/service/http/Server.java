@@ -62,18 +62,20 @@ public class Server implements FairHttpServer {
 
         running = new ArrayList<>(16);
 
-        final String dir = config.hasPath(ConfigPath.STATIC_DIR) ? notNull(config.getString(ConfigPath.STATIC_DIR)) : null;
+        final Config staticsCfg = config.hasPath("fair.http.statics") && !config.getIsNull("fair.http.statics") ? config.getConfig("fair.http.statics") : null;
+        final String dir = staticsCfg != null && staticsCfg.hasPath("root") && !staticsCfg.getIsNull("root") ? notNull(config.getString("root")) : null;
+
         if (isEmpty(dir))
             assets = new NoStatics();
         else {
             if (dir.startsWith(PlaceHolder))
-                assets = new BundledRead();
+                assets = new BundledRead(staticsCfg, dir);
             else {
                 final Path p = Paths.get(dir);
                 if (!Files.exists(p) || !Files.isDirectory(p))
                     assets = new NoStatics();
                 else
-                    assets = new DirectRead();
+                    assets = new DirectRead(staticsCfg, dir);
             }
         }
 
