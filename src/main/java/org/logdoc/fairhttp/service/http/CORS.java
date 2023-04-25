@@ -1,7 +1,6 @@
 package org.logdoc.fairhttp.service.http;
 
 import com.typesafe.config.Config;
-import org.logdoc.fairhttp.service.api.helpers.Headers;
 
 import java.util.HashSet;
 import java.util.Set;
@@ -56,15 +55,12 @@ class CORS {
     private void setCorsValues(final Config cors, final String path, final Set<String> target) {
         if (cors.hasPath(path))
             try {
-                switch (cors.getValue(path).valueType()) {
-                    case LIST:
-                        target.addAll(cors.getStringList(path).stream().map(String::toLowerCase).collect(Collectors.toList()));
-                        break;
-                    case STRING:
-                        target.add(cors.getString(path).toLowerCase());
-                        break;
-                }
+                target.addAll(cors.getStringList(path).stream().map(String::toLowerCase).collect(Collectors.toList()));
             } catch (final Exception ignore) {
+                try {
+                    target.add(cors.getString(path).toLowerCase());
+                } catch (final Exception ignored) {
+                }
             }
     }
 

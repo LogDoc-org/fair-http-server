@@ -3,9 +3,13 @@ package org.logdoc.fairhttp.service.api;
 import com.fasterxml.jackson.databind.JsonNode;
 import org.logdoc.fairhttp.service.api.helpers.MimeType;
 import org.logdoc.fairhttp.service.http.Http;
+import org.logdoc.fairhttp.service.http.statics.DirectRead;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
-import java.io.IOException;
+import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.nio.file.Path;
 
 /**
@@ -14,6 +18,8 @@ import java.nio.file.Path;
  * FairHttpService ☭ sweat and blood
  */
 public class Controller {
+    private static final Logger logger = LoggerFactory.getLogger(Controller.class);
+
     public static Http.Response ok() {
         return Http.Response.Ok();
     }
@@ -26,8 +32,26 @@ public class Controller {
         return response;
     }
 
-    public static Http.Response ok(final Path file) throws IOException {
-        return Http.Response.filePromise(file);
+    public static Http.Response ok(final Path p) {
+        try {
+            if (!Files.exists(p)) {
+                logger.error("Path not found: " + p);
+                return Http.Response.NotFound();
+            }
+
+            final int[] head = new int[16];
+
+            try (final InputStream is = Files.newInputStream(p)) {
+                for (int i = 0, b = 0; i < head.length && b != -1; i++)
+                    head[i] = (b = is.read());
+            }
+
+            return DirectRead.fileResponse(p, MimeType.guessMime(head).toString(), Files.size(p));
+        } catch (final Exception e) {
+            logger.error(e.getMessage(), e);
+
+            return Http.Response.ServerError();
+        }
     }
 
     public static Http.Response ok(final String data) {

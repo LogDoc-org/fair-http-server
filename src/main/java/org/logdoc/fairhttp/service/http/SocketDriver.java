@@ -11,6 +11,7 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.Socket;
 import java.net.SocketTimeoutException;
+import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.concurrent.atomic.AtomicReference;
@@ -92,7 +93,7 @@ public class SocketDriver {
     private Consumer<Byte> pathConsume() {
         return b -> {
             if (Character.isSpaceChar(b)) {
-                request.path = tmp.toString(StandardCharsets.US_ASCII);
+                request.path = URLDecoder.decode(tmp.toString(StandardCharsets.US_ASCII), StandardCharsets.UTF_8).replaceAll("/{2,}", "/");
                 logger.debug("Request path: " + request.path);
                 tmp.reset();
                 consumer = protoConsume();

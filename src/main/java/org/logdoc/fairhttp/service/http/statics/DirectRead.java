@@ -1,48 +1,46 @@
 package org.logdoc.fairhttp.service.http.statics;
 
 import com.typesafe.config.Config;
+import com.typesafe.config.ConfigException;
+import org.logdoc.fairhttp.service.api.helpers.Headers;
 import org.logdoc.fairhttp.service.api.helpers.MimeType;
 import org.logdoc.fairhttp.service.http.Http;
-import org.logdoc.fairhttp.service.tools.ConfigPath;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.File;
 import java.io.IOException;
-import java.net.URLDecoder;
-import java.nio.charset.StandardCharsets;
+import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
-import java.time.format.DateTimeFormatter;
 import java.util.Objects;
-import java.util.function.Function;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import static org.logdoc.fairhttp.service.DI.gain;
-import static org.logdoc.fairhttp.service.tools.Strings.isEmpty;
 
 /**
  * @author Denis Danilin | me@loslobos.ru
  * 04.03.2023 13:30
  * fair-http-server ☭ sweat and blood
  */
-public class DirectRead implements Function<String, Http.Response> {
+public class DirectRead extends StaticRead {
     private static final Logger logger = LoggerFactory.getLogger(DirectRead.class);
-    private static final DateTimeFormatter format = DateTimeFormatter.ofPattern("dd-MM-yyyy HH:mm");
 
     private final Path root;
-    private final boolean autoIndex;
-    private final String indexFile;
 
     public DirectRead() {
-        final Config c = gain(Config.class);
+        super(gain(Config.class).getConfig("statics"));
 
-        root = Paths.get(c.getString(ConfigPath.STATIC_DIR));
-        autoIndex = c.hasPath(ConfigPath.AUTO_INDEX) && c.getBoolean(ConfigPath.AUTO_INDEX);
-        indexFile = c.hasPath(ConfigPath.INDEX_FILE) ? c.getString(ConfigPath.INDEX_FILE) : null;
+        try {
+            root = Paths.get(gain(Config.class).getConfig("statics").getString(rootPrm));
+        } catch (final ConfigException e) {
+            logger.error(e.getMessage(), e);
+            throw new IllegalStateException(e);
+        }
 
         if (!Files.exists(root))
             throw new IllegalStateException("root dir doesnt exists");
@@ -50,65 +48,117 @@ public class DirectRead implements Function<String, Http.Response> {
 
     @Override
     public Http.Response apply(final String s) {
-        final Path p = root.resolve("." + URLDecoder.decode(s, StandardCharsets.UTF_8).replace('/', File.separatorChar));
+        final Path p = root.resolve(('/' + s).replace('/', File.separatorChar));
 
         if (!Files.exists(p))
             return Http.Response.NotFound();
 
+        Http.Response response = pickCached(s);
+
         try {
+            if (response != null)
+                return response;
+
             if (Files.isDirectory(p)) {
-                if (!isEmpty(indexFile) && Files.exists(p.resolve(indexFile)))
-                    return apply(s + '/' + indexFile);
+                if (gotIndex) {
+                    for (final String idx : indexFile)
+                        if (Files.exists(p.resolve(idx)) && !Files.isDirectory(p.resolve(idx)))
+                            return apply(s + '/' + p.getFileName());
+                }
 
-                if (autoIndex) {
-                    final StringBuilder html = new StringBuilder("<html><head><title>Index of " + s + "</title></head><body><h1>Index of " + s + "</h1><hr><pre><a href=\"../\">../</a>\n");
-
+                if (autoDirList) {
+                    response = Http.Response.Ok();
                     try (final Stream<Path> fs = Files.list(p)) {
-                        fs
-                                .sorted((o1, o2) -> {
-                                    final boolean f1 = Files.isDirectory(o1);
-                                    final boolean f2 = Files.isDirectory(o2);
-
-                                    final int res = Boolean.compare(f2, f1);
-                                    return res == 0 ? o1.compareTo(o2) : res;
-                                })
+                        response.setPayload(dirList(p.getFileName().toString(), fs
                                 .map(f -> {
                                     try {
-                                        final boolean i = Files.isDirectory(f);
-                                        final String n = f.getFileName() + (i ? "/" : "");
-                                        final String d = LocalDateTime.from(Files.getLastModifiedTime(f).toInstant().atZone(ZoneId.systemDefault())).format(format); // 17
-                                        final String l = i ? "-" : Long.toString(Files.size(f));
+                                        final FRes fr = new FRes();
+                                        fr.isFile = !Files.isDirectory(f);
+                                        fr.time = LocalDateTime.from(Files.getLastModifiedTime(f).toInstant().atZone(ZoneId.systemDefault()));
+                                        fr.name = f.getFileName().toString();
+                                        fr.size = fr.isFile ? Files.size(f) : 0;
 
-                                        return "<a href='" + (s + "/" + n).replaceAll("/{2,}", "/") + "'>" + n + "</a>" + " ".repeat(Math.max(0, (51 - n.length()))) +
-                                                d +
-                                                " ".repeat(Math.max(0, 20 - l.length())) +
-                                                l +
-                                                "\n";
+                                        return fr;
                                     } catch (final Exception e) {
                                         logger.error(e.getMessage(), e);
                                         return null;
                                     }
                                 })
                                 .filter(Objects::nonNull)
-                                .forEach(html::append);
+                                .collect(Collectors.toList())), MimeType.TEXTHTML);
                     }
+                } else
+                    response = Http.Response.Forbidden();
+            } else {
+                final int dot = p.getFileName().toString().lastIndexOf('.');
+                String mime = null;
 
-                    html.append("</pre><hr></body></html>");
+                if (dot > 0)
+                    mime = getMime(p.getFileName().toString().substring(dot));
 
-                    final Http.Response r = Http.Response.Ok();
-                    r.setPayload(html.toString().getBytes(StandardCharsets.UTF_8), MimeType.TEXTHTML);
+                if (mime == null) {
+                    mime = refreshMime(s);
 
-                    return r;
+                    if (mime == null) {
+                        final int[] head = new int[16];
+
+                        try (final InputStream is = Files.newInputStream(p)) {
+                            for (int i = 0, b = 0; i < head.length && b != -1; i++)
+                                head[i] = (b = is.read());
+                        }
+
+                        mime = MimeType.guessMime(head).toString();
+
+                        rememberMime(s, mime);
+                    }
                 }
 
-                return Http.Response.Forbidden();
+                long size = Files.size(p);
+
+                response = Http.Response.Ok();
+                response.header(Headers.ContentType, mime);
+                response.header(Headers.ContentLength, size);
+                response.setPromise(os -> {
+                    final byte[] buf = new byte[1024 * 640];
+                    int read;
+
+                    try (final InputStream is = Files.newInputStream(p)) {
+                        while ((read = is.read(buf)) != -1)
+                            os.write(buf, 0, read);
+                        os.flush();
+                    } catch (final Exception e) {
+                        logger.error(p + " :: " + e.getMessage(), e);
+                    }
+                });
             }
 
-            return Http.Response.filePromise(p);
-        } catch (IOException e) {
+            return response;
+        } catch (final IOException e) {
             logger.error(e.getMessage(), e);
 
             return Http.Response.ServerError();
+        } finally {
+            cacheMe(s, response);
         }
+    }
+
+    public static Http.Response fileResponse(final Path p, final String mimeType, final long size) {
+        final Http.Response response = Http.Response.Ok();
+        response.header(Headers.ContentType, mimeType);
+        response.header(Headers.ContentLength, size);
+        response.setPromise(os -> {
+            final byte[] buf = new byte[1024 * 640];
+            int read;
+
+            try (final InputStream is = Files.newInputStream(p)) {
+                while ((read = is.read(buf)) != -1)
+                    os.write(buf, 0, read);
+                os.flush();
+            } catch (final Exception e) {
+                logger.error(p + " :: " + e.getMessage(), e);
+            }
+        });
+
+        return response;
     }
 }

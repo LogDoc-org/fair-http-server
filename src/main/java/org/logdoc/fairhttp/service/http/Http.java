@@ -30,8 +30,6 @@ import java.math.BigInteger;
 import java.net.HttpCookie;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.Duration;
@@ -379,36 +377,6 @@ public class Http {
 
         public static Response ServerError() {
             return new Response(500, "Internal error");
-        }
-
-        public static Response filePromise(final Path p) throws IOException {
-            if (!Files.exists(p))
-                return NotFound();
-
-            final int[] head = new int[16];
-
-            try (final InputStream is = Files.newInputStream(p)) {
-                for (int i = 0, b = 0; i < head.length && b != -1; i++)
-                    head[i] = (b = is.read());
-            }
-
-            final Response response = Ok();
-
-            response.header(Headers.ContentType, MimeType.guessMime(head));
-            response.header(Headers.ContentLength, Files.size(p));
-            response.setPromise(os -> {
-                final byte[] buf = new byte[1024 * 640];
-                int read;
-
-                try (final InputStream is = Files.newInputStream(p)) {
-                    while ((read = is.read(buf)) != -1)
-                        os.write(buf, 0, read);
-                } catch (final Exception e) {
-                    logger.error(p + " :: " + e.getMessage(), e);
-                }
-            });
-
-            return response;
         }
 
         public void setPromise(final Consumer<OutputStream> promise) {

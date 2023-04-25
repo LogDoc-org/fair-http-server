@@ -5,6 +5,7 @@ import org.logdoc.fairhttp.service.api.helpers.DynamicRoute;
 import org.logdoc.fairhttp.service.api.helpers.FairHttpServer;
 import org.logdoc.fairhttp.service.api.helpers.MimeType;
 import org.logdoc.fairhttp.service.api.helpers.endpoint.Endpoint;
+import org.logdoc.fairhttp.service.http.statics.BundledRead;
 import org.logdoc.fairhttp.service.http.statics.DirectRead;
 import org.logdoc.fairhttp.service.http.statics.NoStatics;
 import org.logdoc.fairhttp.service.tools.ConfigPath;
@@ -15,12 +16,17 @@ import java.net.Inet4Address;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Function;
 
+import static org.logdoc.fairhttp.service.http.statics.BundledRead.PlaceHolder;
 import static org.logdoc.fairhttp.service.tools.Strings.isEmpty;
+import static org.logdoc.fairhttp.service.tools.Strings.notNull;
 
 /**
  * @author Denis Danilin | me@loslobos.ru
@@ -56,8 +62,21 @@ public class Server implements FairHttpServer {
 
         running = new ArrayList<>(16);
 
-        final String dir = config.hasPath(ConfigPath.STATIC_DIR) ? config.getString(ConfigPath.STATIC_DIR) : null;
-        assets = isEmpty(dir) ? new NoStatics() : new DirectRead();
+        final String dir = config.hasPath(ConfigPath.STATIC_DIR) ? notNull(config.getString(ConfigPath.STATIC_DIR)) : null;
+        if (isEmpty(dir))
+            assets = new NoStatics();
+        else {
+            if (dir.startsWith(PlaceHolder))
+                assets = new BundledRead();
+            else {
+                final Path p = Paths.get(dir);
+                if (!Files.exists(p) || !Files.isDirectory(p))
+                    assets = new NoStatics();
+                else
+                    assets = new DirectRead();
+            }
+        }
+
         cors = new CORS(config);
     }
 
