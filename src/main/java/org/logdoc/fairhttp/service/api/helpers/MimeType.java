@@ -7,9 +7,11 @@ import java.util.HashMap;
 import java.util.Map;
 
 /**
- * @author Denis Danilin | me@loslobos.ru
+ * @author javax.mail
  * 27.12.2022 13:53
  * fairhttp ☭ sweat and blood
+ *
+ * Borrowed from javax.mail
  */
 public class MimeType {
 

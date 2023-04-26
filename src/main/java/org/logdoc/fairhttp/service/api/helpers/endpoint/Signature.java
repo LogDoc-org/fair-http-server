@@ -10,7 +10,7 @@ import java.util.regex.Pattern;
  * FairHttpService ☭ sweat and blood
  */
 class Signature implements Comparable<Signature> {
-    private static final Pattern placeHold = Pattern.compile("/:([^/]+)/");
+    private static final Pattern placeHold = Pattern.compile("/:([^/]+)");
 
     private final int weight;
     private final String string;
@@ -28,7 +28,7 @@ class Signature implements Comparable<Signature> {
                 names.add(phm.group(1));
             } while (phm.find());
 
-            pattern = Pattern.compile("^" + proper.replaceAll(placeHold.pattern(), "/([^/]+)/") + "$");
+            pattern = Pattern.compile("^" + proper.replaceAll(placeHold.pattern(), "/([^/]+)") + "$");
             string = pattern.pattern();
         } else {
             string = proper;
