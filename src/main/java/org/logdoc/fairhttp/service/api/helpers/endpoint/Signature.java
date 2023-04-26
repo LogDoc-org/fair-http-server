@@ -18,7 +18,7 @@ class Signature implements Comparable<Signature> {
     private final List<String> names;
 
     Signature(final String raw) {
-        final String proper = (raw.trim() + (raw.trim().endsWith("/") ? "" : "/")).replaceAll("/{2,}", "/");
+        final String proper = raw.trim().replaceAll("/{2,}", "/");
 
         Matcher phm = placeHold.matcher(proper);
         if (phm.find()) { // patterned

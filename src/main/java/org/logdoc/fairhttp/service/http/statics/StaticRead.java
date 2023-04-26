@@ -12,10 +12,14 @@ import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
-import java.util.*;
+import java.util.Collection;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
 import java.util.concurrent.*;
 import java.util.function.Function;
 
+import static org.logdoc.fairhttp.service.tools.ConfigTools.*;
 import static org.logdoc.fairhttp.service.tools.Strings.isEmpty;
 
 /**
@@ -25,7 +29,6 @@ import static org.logdoc.fairhttp.service.tools.Strings.isEmpty;
  */
 abstract class StaticRead implements Function<String, Http.Response> {
     protected final static Logger logger = LoggerFactory.getLogger(StaticRead.class);
-    protected final static String rootPrm = "root";
     private static final DateTimeFormatter format = DateTimeFormatter.ofPattern("dd-MM-yyyy HH:mm");
     private final static String autoIdxPrm = "auto_index", indexesPrm = "index_files", cachePrm = "memory_cache", mimesPrm = "mime_types",
             cacheEnblPrm = "enabled", cacheSizePrm = "max_file_size", cacheLifePrm = "lifetime",
@@ -47,16 +50,14 @@ abstract class StaticRead implements Function<String, Http.Response> {
             indexFile = new HashSet<>(3);
             mimes = new ConcurrentHashMap<>(8);
 
-            autoDirList = staticCfg.hasPath(autoIdxPrm) && !staticCfg.getIsNull(autoIdxPrm) && staticCfg.getBoolean(autoIdxPrm);
+            autoDirList = sureBool(staticCfg, autoIdxPrm);
 
             logger.info("Static folders auto indexing is " + (autoDirList ? "en" : "dis") + "abled.");
 
-            if (staticCfg.hasPath(indexesPrm) && !staticCfg.getIsNull(indexesPrm)) {
-                final List<String> names = staticCfg.getStringList(indexesPrm);
+            final List<String> names = sureStrings(staticCfg, indexesPrm);
 
-                if (!isEmpty(names))
-                    indexFile.addAll(names);
-            }
+            if (!isEmpty(names))
+                indexFile.addAll(names);
 
             gotIndex = !indexFile.isEmpty();
 
@@ -65,20 +66,20 @@ abstract class StaticRead implements Function<String, Http.Response> {
             else
                 logger.info("No index files defined.");
 
-            final Config cacheCfg = staticCfg.hasPath(cachePrm) && !staticCfg.getIsNull(cachePrm) ? staticCfg.getConfig(cachePrm) : null;
+            final Config cacheCfg = sureConf(staticCfg, cachePrm);
 
             long cs = 0, cl = 0;
             if (cacheCfg != null) {
-                cache = cacheCfg.hasPath(cacheEnblPrm) && !cacheCfg.getIsNull(cacheEnblPrm) && cacheCfg.getBoolean(cacheEnblPrm);
+                cache = sureBool(cacheCfg, cacheEnblPrm);
 
                 if (cache) {
                     cs = 512 * 1024;
                     cl = Duration.of(3, ChronoUnit.MINUTES).toMillis();
 
-                    if (cacheCfg.hasPath(cacheLifePrm) && !cacheCfg.getIsNull(cacheLifePrm))
+                    if (sureNN(cacheCfg, cacheLifePrm))
                         cl = cacheCfg.getDuration(cacheLifePrm, TimeUnit.MILLISECONDS);
 
-                    if (cacheCfg.hasPath(cacheSizePrm) && !cacheCfg.getIsNull(cacheSizePrm))
+                    if (sureNN(cacheCfg, cacheSizePrm))
                         cs = cacheCfg.getBytes(cacheSizePrm);
                 }
             } else
@@ -101,14 +102,14 @@ abstract class StaticRead implements Function<String, Http.Response> {
                 logger.info("Static caching is disabled");
             }
 
-            if (staticCfg.hasPath(mimesPrm) && !staticCfg.getIsNull(mimesPrm)) {
+            if (sureNN(staticCfg, mimesPrm)) {
                 final List<? extends Config> mcfgs = staticCfg.getConfigList(mimesPrm);
 
                 for (final Config mc : mcfgs)
                     try {
                         final String mime = new MimeType(mc.getString(mimeMimePrm)).toString();
 
-                        final Set<String> exts = new HashSet<>(mc.getStringList(mimeExtPrm));
+                        final Set<String> exts = new HashSet<>(sureStrings(mc, mimeExtPrm));
 
                         if (!isEmpty(mime) && !isEmpty(exts)) {
                             for (final String ext : exts)
@@ -117,6 +118,7 @@ abstract class StaticRead implements Function<String, Http.Response> {
                             logger.info("Additional MIME type '" + mime + "' associated with extensions: " + exts);
                         }
                     } catch (final Exception ignore) {
+                        logger.error(ignore.getMessage(), ignore);
                     }
             }
 

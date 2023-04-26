@@ -42,6 +42,8 @@ public class DirectRead extends StaticRead {
 
         if (!Files.exists(this.root))
             throw new IllegalStateException("root dir doesnt exists");
+
+        logger.info("Static content root dir: " + this.root);
     }
 
     @Override

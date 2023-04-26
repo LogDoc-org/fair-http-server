@@ -219,9 +219,6 @@ public class Http {
                                 .forEach(kv -> query.put(kv[0], URLDecoder.decode(kv[1], StandardCharsets.UTF_8)));
                 } else
                     hardPath = path;
-
-                if (!hardPath.endsWith("/"))
-                    hardPath += "/";
             }
 
             return query.get(paramName);

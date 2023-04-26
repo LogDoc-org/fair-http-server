@@ -8,16 +8,12 @@ import org.logdoc.fairhttp.service.http.Http;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.InputStreamReader;
 import java.net.URL;
 import java.time.LocalDateTime;
-import java.util.ArrayList;
-import java.util.List;
 
-import static org.logdoc.fairhttp.service.tools.Strings.notNull;
+import static org.logdoc.fairhttp.service.tools.Strings.isEmpty;
 
 /**
  * @author Denis Danilin | me@loslobos.ru
@@ -30,35 +26,42 @@ public class BundledRead extends StaticRead {
     private final ClassLoader cl;
     private final String prefix;
 
-    public BundledRead(final Config staticsCfg, final String prefix) {
+    public BundledRead(final Config staticsCfg, String prefix) {
         super(staticsCfg);
 
         cl = BundledRead.class.getClassLoader();
 
         try {
-            this.prefix = notNull(prefix.replace(PlaceHolder, ""), "/");
+            prefix = prefix.replace(PlaceHolder, "").trim();
+            if (isEmpty(prefix))
+                prefix = "/";
+            else if (!prefix.endsWith("/"))
+                prefix += "/";
+            this.prefix = prefix;
         } catch (final ConfigException e) {
             logger.error(e.getMessage(), e);
             throw new IllegalStateException(e);
         }
 
-        if (!this.prefix.equals("/") && cl.getResource(prefix + "/") == null)
-            throw new IllegalStateException("Unknown static root resource: " + prefix);
+        if (!this.prefix.equals("/") && cl.getResource(this.prefix) == null)
+            throw new IllegalStateException("Unknown static root resource: " + this.prefix);
+
+        logger.info("Static content root: " + this.prefix);
+        if (autoDirList)
+            logger.warn("WARNING: Auto directory listing is disabled in bundled content.");
     }
 
     private FRes resolve(final String path) {
-        final String p = (prefix + '/' + path).replaceAll("/{2,}", "/");
-        final String dp = p + (p.endsWith("/") ? "" : "/");
+        final String p = (prefix + path).replaceAll("/{2,}", "/");
 
-        final URL res = cl.getResource(p);
+        final URL fileRes = cl.getResource(p);
 
         final FRes f = new FRes();
-        f.isFile = cl.getResource(dp) == null;
-        f.name = f.isFile ? p : dp;
-        f.exists = res != null;
+        f.name = p;
+        f.exists = fileRes != null;
         f.time = LocalDateTime.now();
         try {
-            f.size = f.isFile && f.exists && res != null ? res.openConnection().getContentLength() : 0;
+            f.size = fileRes != null ? fileRes.openConnection().getContentLength() : 0;
         } catch (final Exception ignore) {
         }
 
@@ -66,54 +69,34 @@ public class BundledRead extends StaticRead {
     }
 
     @Override
-    public Http.Response apply(final String s) {
-        final FRes p = resolve(s);
+    public Http.Response apply(final String s0) {
+        final FRes p = resolve(s0);
 
         if (!p.exists)
             return Http.Response.NotFound();
 
-        Http.Response response = pickCached(s);
+        Http.Response response = pickCached(p.name);
 
         try {
             if (response != null)
                 return response;
 
-            if (!p.isFile) {
-                if (gotIndex) {
-                    FRes check;
-
+            if (s0.endsWith("/")) {
+                if (gotIndex)
                     for (final String idx : indexFile)
-                        if ((check = resolve(s + '/' + idx)).exists && check.isFile)
-                            return apply(s + '/' + idx);
-                }
+                        if (resolve(s0 + '/' + idx).exists)
+                            return apply(s0 + '/' + idx);
 
-                if (autoDirList) {
-                    response = Http.Response.Ok();
-
-                    final List<FRes> list = new ArrayList<>(16);
-
-                    try (final InputStream is = cl.getResourceAsStream(p.name); final BufferedReader br = is == null ? null : new BufferedReader(new InputStreamReader(is))) {
-                        if (br != null) {
-                            String resource;
-
-                            while ((resource = br.readLine()) != null) {
-                                list.add(resolve(s + '/' + resource));
-                            }
-                        }
-                    }
-
-                    response.setPayload(dirList(p.name, list), MimeType.TEXTHTML);
-                } else
-                    response = Http.Response.Forbidden();
+                response = Http.Response.Forbidden();
             } else {
-                final int dot = s.lastIndexOf('.');
+                final int dot = p.name.lastIndexOf('.');
                 String mime = null;
 
                 if (dot > 0)
-                    mime = getMime(s.substring(dot));
+                    mime = getMime(p.name.substring(dot));
 
                 if (mime == null) {
-                    mime = refreshMime(s);
+                    mime = refreshMime(s0);
 
                     if (mime == null) {
                         final int[] head = new int[16];
@@ -127,7 +110,7 @@ public class BundledRead extends StaticRead {
 
                         mime = MimeType.guessMime(head).toString();
 
-                        rememberMime(s, mime);
+                        rememberMime(s0, mime);
                     }
                 }
 
@@ -156,7 +139,7 @@ public class BundledRead extends StaticRead {
 
             return Http.Response.ServerError();
         } finally {
-            cacheMe(s, response);
+            cacheMe(s0, response);
         }
     }
 }
