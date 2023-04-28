@@ -65,19 +65,24 @@ public class Server implements FairHttpServer {
         final Config staticsCfg = config.hasPath("fair.http.statics") && !config.getIsNull("fair.http.statics") ? config.getConfig("fair.http.statics") : null;
         final String dir = staticsCfg != null && staticsCfg.hasPath("root") && !staticsCfg.getIsNull("root") ? notNull(staticsCfg.getString("root")) : null;
 
-        if (isEmpty(dir))
-            assets = new NoStatics();
-        else {
-            if (dir.startsWith(PlaceHolder))
-                assets = new BundledRead(staticsCfg, dir);
-            else {
-                final Path p = Paths.get(dir);
-                if (!Files.exists(p) || !Files.isDirectory(p))
-                    assets = new NoStatics();
-                else
-                    assets = new DirectRead(staticsCfg, dir);
+        Function<String, Http.Response> assets0 = new NoStatics();
+
+        try {
+            if (!isEmpty(dir)) {
+                if (dir.startsWith(PlaceHolder))
+                    assets0 = new BundledRead(staticsCfg, dir);
+                else {
+                    final Path p = Paths.get(dir);
+                    if (Files.exists(p) && Files.isDirectory(p))
+                        assets0 = new DirectRead(staticsCfg, dir);
+                }
             }
+        } catch (final IllegalStateException ise) {
+            logger.debug("Cant setup static assets: " + ise.getMessage() + ", noop.");
+            assets0 = new NoStatics();
         }
+
+        assets = assets0;
 
         cors = new CORS(config);
     }

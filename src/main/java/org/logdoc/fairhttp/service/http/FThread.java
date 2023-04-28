@@ -7,8 +7,6 @@ import java.io.IOException;
 import java.net.Socket;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * @author Denis Danilin | me@loslobos.ru
@@ -20,12 +18,12 @@ class FThread extends Thread {
 
     private final Server server;
 
-    private final Set<SocketDriver> opened;
+    private final List<SocketDriver> opened;
 
     FThread(final Socket socket, final Server server) {
         this.server = server;
 
-        opened = ConcurrentHashMap.newKeySet(8);
+        opened = new ArrayList<>(8);
 
         setDaemon(true);
 
@@ -41,7 +39,9 @@ class FThread extends Thread {
         try {
             socket.setSoTimeout(30);
 
-            return opened.add(new SocketDriver(socket));
+            synchronized (opened) {
+                return opened.add(new SocketDriver(socket));
+            }
         } catch (final Exception e) {
             logger.error("Cant setup socket timeout: " + e.getMessage(), e);
         }
@@ -54,7 +54,7 @@ class FThread extends Thread {
     public void run() {
         MAIN:
         while (!opened.isEmpty() || !server.mayClose()) {
-            while (opened.isEmpty() || opened.stream().allMatch(s -> s.state() != SocketDriver.STATE.ACCEPTING))
+            while (opened.isEmpty())
                 try {
                     sleep(30);
                 } catch (final InterruptedException e) {
@@ -62,12 +62,13 @@ class FThread extends Thread {
                         break MAIN;
                 }
 
-            final int iterationLimit = opened.size() == 1 ? Integer.MAX_VALUE : 1024 * (16 - (server.capacityLimit() - 2));
+            final int iterationLimit = opened.size() == 1 ? Integer.MAX_VALUE : Math.max((1024 * 1024) - server.capacityLimit(), 1024 * 8);
+            boolean read = false;
 
-            final List<SocketDriver> toRemove = new ArrayList<>(8);
-
-            for (final SocketDriver s : opened)
+            for (int i = 0; i < opened.size(); i++) {
+                final SocketDriver s = opened.get(i);
                 if (s.state() == SocketDriver.STATE.ACCEPTING) {
+                    read = true;
                     try {
                         s.read(iterationLimit);
 
@@ -75,18 +76,27 @@ class FThread extends Thread {
                             server.handleRequest(s);
                     } catch (final IOException e) {
                         logger.debug("Closing socket: " + s + " :: " + e.getMessage());
-                        toRemove.add(s);
+                        try {
+                            opened.remove(i--).close();
+                        } catch (final Exception ignore) {
+                        }
                     }
-                } else if (s.state() == SocketDriver.STATE.SOCKETERROR)
-                    toRemove.add(s);
-
-            toRemove.forEach(driver -> {
-                try {
-                    driver.close();
-                } catch (final Exception ignore) {
+                } else if (s.state() == SocketDriver.STATE.SOCKETERROR) {
+                    read = true;
+                    try {
+                        opened.remove(i--).close();
+                    } catch (final Exception ignore) {
+                    }
                 }
-                opened.remove(driver);
-            });
+            }
+
+            if (!read)
+                try {
+                    sleep(30);
+                } catch (final InterruptedException e) {
+                    if (isInterrupted())
+                        break MAIN;
+                }
         }
 
         try {

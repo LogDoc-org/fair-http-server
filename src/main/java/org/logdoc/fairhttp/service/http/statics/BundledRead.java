@@ -12,6 +12,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.net.URL;
 import java.time.LocalDateTime;
+import java.util.concurrent.CompletableFuture;
 
 import static org.logdoc.fairhttp.service.tools.Strings.isEmpty;
 
@@ -46,7 +47,7 @@ public class BundledRead extends StaticRead {
         if (!this.prefix.equals("/") && cl.getResource(this.prefix) == null)
             throw new IllegalStateException("Unknown static root resource: " + this.prefix);
 
-        logger.info("Static content root: " + this.prefix);
+        logger.info("Static bundled content root: " + this.prefix);
         if (autoDirList)
             logger.warn("WARNING: Auto directory listing is disabled in bundled content.");
     }
@@ -139,7 +140,8 @@ public class BundledRead extends StaticRead {
 
             return Http.Response.ServerError();
         } finally {
-            cacheMe(s0, response);
+            final Http.Response finalResponse = response;
+            CompletableFuture.runAsync(() -> cacheMe(s0, finalResponse));
         }
     }
 }
