@@ -11,5 +11,6 @@ public interface ConfigPath {
     String CORS_ORIGINS = "origins";
     String CORS_METHODS = "methods";
     String CORS_HEADERS = "headers";
+    String CORS_EXPOSE = "expose";
     String CORS_CREDS = "allow_credentials";
 }
