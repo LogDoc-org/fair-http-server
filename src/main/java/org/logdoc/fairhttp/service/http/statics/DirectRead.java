@@ -47,13 +47,13 @@ public class DirectRead extends StaticRead {
     }
 
     @Override
-    public Http.Response apply(final String s) {
-        final Path p = root.resolve(('/' + s).replace('/', File.separatorChar));
+    public Http.Response apply(final String webpath) {
+        final Path p = root.resolve(('/' + webpath).replace('/', File.separatorChar));
 
         if (!Files.exists(p))
-            return Http.Response.NotFound();
+            return map404(webpath);
 
-        Http.Response response = pickCached(s);
+        Http.Response response = pickCached(webpath);
 
         try {
             if (response != null)
@@ -63,7 +63,7 @@ public class DirectRead extends StaticRead {
                 if (gotIndex) {
                     for (final String idx : indexFile)
                         if (Files.exists(p.resolve(idx)) && !Files.isDirectory(p.resolve(idx)))
-                            return apply(s + '/' + p.getFileName());
+                            return apply(webpath + '/' + p.getFileName());
                 }
 
                 if (autoDirList) {
@@ -97,7 +97,7 @@ public class DirectRead extends StaticRead {
                     mime = getMime(p.getFileName().toString().substring(dot));
 
                 if (mime == null) {
-                    mime = refreshMime(s);
+                    mime = refreshMime(webpath);
 
                     if (mime == null) {
                         final int[] head = new int[16];
@@ -109,7 +109,7 @@ public class DirectRead extends StaticRead {
 
                         mime = MimeType.guessMime(head).toString();
 
-                        rememberMime(s, mime);
+                        rememberMime(webpath, mime);
                     }
                 }
 
@@ -138,7 +138,7 @@ public class DirectRead extends StaticRead {
 
             return Http.Response.ServerError();
         } finally {
-            cacheMe(s, response);
+            cacheMe(webpath, response);
         }
     }
 

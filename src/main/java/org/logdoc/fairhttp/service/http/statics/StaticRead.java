@@ -30,7 +30,7 @@ import static org.logdoc.fairhttp.service.tools.Strings.isEmpty;
 abstract class StaticRead implements Function<String, Http.Response> {
     protected final static Logger logger = LoggerFactory.getLogger(StaticRead.class);
     private static final DateTimeFormatter format = DateTimeFormatter.ofPattern("dd-MM-yyyy HH:mm");
-    private final static String autoIdxPrm = "auto_index", indexesPrm = "index_files", cachePrm = "memory_cache", mimesPrm = "mime_types",
+    private final static String autoIdxPrm = "auto_index", indexesPrm = "index_files", map404To = "map404_to", cachePrm = "memory_cache", mimesPrm = "mime_types",
             cacheEnblPrm = "enabled", cacheSizePrm = "max_file_size", cacheLifePrm = "lifetime",
             mimeMimePrm = "mime", mimeExtPrm = "ext";
 
@@ -38,6 +38,7 @@ abstract class StaticRead implements Function<String, Http.Response> {
     protected final Set<String> indexFile;
     protected final boolean cache;
     protected final long maxCacheSize, maxCacheLife;
+    protected final String map404Path;
 
     private final ConcurrentMap<String, String> mimes;
     private final ConcurrentMap<String, Http.Response> cachedMap;
@@ -65,6 +66,8 @@ abstract class StaticRead implements Function<String, Http.Response> {
                 logger.info("Index files defined names: " + indexFile);
             else
                 logger.info("No index files defined.");
+
+            map404Path = sureNN(staticCfg, map404To) ? staticCfg.getString(map404To) : null;
 
             final Config cacheCfg = sureConf(staticCfg, cachePrm);
 
@@ -117,8 +120,8 @@ abstract class StaticRead implements Function<String, Http.Response> {
 
                             logger.info("Additional MIME type '" + mime + "' associated with extensions: " + exts);
                         }
-                    } catch (final Exception ignore) {
-                        logger.error(ignore.getMessage(), ignore);
+                    } catch (final Exception er) {
+                        logger.error(er.getMessage(), er);
                     }
             }
 
@@ -129,6 +132,13 @@ abstract class StaticRead implements Function<String, Http.Response> {
             logger.error(e.getMessage(), e);
             throw new IllegalStateException(e);
         }
+    }
+
+    protected Http.Response map404(final String path) {
+        if (map404Path == null || path.equals(map404Path))
+            return Http.Response.NotFound();
+
+        return apply(map404Path);
     }
 
     protected byte[] dirList(final String dirName, final Collection<FRes> content) {

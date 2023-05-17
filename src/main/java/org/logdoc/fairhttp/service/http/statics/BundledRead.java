@@ -70,11 +70,11 @@ public class BundledRead extends StaticRead {
     }
 
     @Override
-    public Http.Response apply(final String s0) {
-        final FRes p = resolve(s0);
+    public Http.Response apply(final String webpath) {
+        final FRes p = resolve(webpath);
 
         if (!p.exists)
-            return Http.Response.NotFound();
+            return map404(webpath);
 
         Http.Response response = pickCached(p.name);
 
@@ -82,11 +82,11 @@ public class BundledRead extends StaticRead {
             if (response != null)
                 return response;
 
-            if (s0.endsWith("/")) {
+            if (webpath.endsWith("/")) {
                 if (gotIndex)
                     for (final String idx : indexFile)
-                        if (resolve(s0 + '/' + idx).exists)
-                            return apply(s0 + '/' + idx);
+                        if (resolve(webpath + '/' + idx).exists)
+                            return apply(webpath + '/' + idx);
 
                 response = Http.Response.Forbidden();
             } else {
@@ -97,7 +97,7 @@ public class BundledRead extends StaticRead {
                     mime = getMime(p.name.substring(dot));
 
                 if (mime == null) {
-                    mime = refreshMime(s0);
+                    mime = refreshMime(webpath);
 
                     if (mime == null) {
                         final int[] head = new int[16];
@@ -111,7 +111,7 @@ public class BundledRead extends StaticRead {
 
                         mime = MimeType.guessMime(head).toString();
 
-                        rememberMime(s0, mime);
+                        rememberMime(webpath, mime);
                     }
                 }
 
@@ -141,7 +141,7 @@ public class BundledRead extends StaticRead {
             return Http.Response.ServerError();
         } finally {
             final Http.Response finalResponse = response;
-            CompletableFuture.runAsync(() -> cacheMe(s0, finalResponse));
+            CompletableFuture.runAsync(() -> cacheMe(webpath, finalResponse));
         }
     }
 }
