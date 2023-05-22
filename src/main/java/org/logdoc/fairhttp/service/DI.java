@@ -162,7 +162,7 @@ public final class DI {
                         continue CYCLE;
 
                     if (arg.equals(loop)) {
-                        logger.error("Founc cross loop dependancy between '" + arg.getName() + "' and '" + loop.getName() + "' classes");
+                        logger.error("Found cross loop dependancy between '" + arg.getName() + "' and '" + loop.getName() + "' classes");
                         return null;
                     }
 
