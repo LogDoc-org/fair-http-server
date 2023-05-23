@@ -1,5 +1,4 @@
-Basics
-====================
+### Basics
 Routes file must be named exactly "routes" and must be available in a classpath at "/" location.
 
 One route defined by one line of three parts:
@@ -14,17 +13,15 @@ Endpont path is an absolute path, may contain named variables (see examples belo
 Handler is a some controller's fully qualified method name. Optionally, may contain arguments definition. 
 
 
-Path variables
-====================
+### Path variables
 In endpoints parts every sequence of chars prepended with `/:` prefix treated as a variable, e.g. everything after prefix and untill next `/` or EOL is taken as the value of this variable.
 That mean defined endpoint `/api/:myvar/set` in runtime backed by regular expression `^/api/([^/]+)/set$` and every path matched that RE will be handled by appropriate handler.
 
 
-Handlers arguments
-====================
+### Handlers arguments
 Full form of argument is: `[Type]name[Container]`.
 
-*Type* is real Java type. *Short*, *boolean*, *Long*, *char*, etc.   
+*Type* is real Java type. *Short*, *boolean*, *Long*, *char*, etc. In most cases it can be omitted, its important when two or more methods have similar signature. 
 
 *name* is a name of the variable used, when its back-referenced from named context - query string, form or path. 
 
@@ -32,17 +29,17 @@ Full form of argument is: `[Type]name[Container]`.
 - `Form` - Simple form or multipart form
 - `Body` - Whole request's body is treated like a json object
 - `Query` - Query-string of the request
+- `Path` - Path of the request (Redundant marker, path vars are matched by names)
 - `Cookie` - Cookies of the request
 - `Request` - Special case, when handler need whole request as an object
 
 Full form is rarely required, in most cases one or two parts can be omitted, when it evaluable.
 
 
-Examples
-====================
-**Primitive.**
+### Examples
+##### Primitive.
 
-Handler:
+###### Handler:
 ```java
 import org.logdoc.fairhttp.service.api.Controller;
 import org.logdoc.fairhttp.service.http.Http;
@@ -55,17 +52,17 @@ public class MyController extends Controller {
 }
 ```
 
-Route:
+###### Route:
 ```text
 GET     /api/version    controllers.MyController.getVersion()
 ```
 
 No path variables, no handlers arguments, nothing special. Parentheses are optional.
 
-Request:  
+###### Request:  
 `curl https://host.com/api/version`  
 
-Response:
+###### Response:
 ```text
 < HTTP/1.1 200 Ok
 < Content-Type: text/plain; charset=utf-8
@@ -73,9 +70,9 @@ Response:
 ```
 
 ---------------------------------------
-**Some path vars.**
+##### Some path vars.
 
-Handler:
+###### Handler:
 ```java
 import org.logdoc.fairhttp.service.api.Controller;
 import org.logdoc.fairhttp.service.http.Http;
@@ -88,7 +85,7 @@ public class MyController extends Controller {
 }
 ```
 
-Route:
+###### Route:
 ```text
 GET     /api/hello/:myName    controllers.MyController.sayHello(myName)
 ```
@@ -100,9 +97,9 @@ Equivalent full form:
 GET     /api/hello/:myName    controllers.MyController.sayHello([String] myName [Path])
 ```
 
-Request:  
+###### Request:
 `curl https://host.com/api/hello/Robert`  
-Response:
+###### Response:
 ```text
 < HTTP/1.1 200 Ok
 < Content-Type: text/plain; charset=utf-8
@@ -113,9 +110,9 @@ Hello, Robert
 
 
 ----------------------
-**Path, query and types**  
+##### Path, query and types  
 
-Handler:
+###### Handler:
 ```java
 import org.logdoc.fairhttp.service.api.Controller;
 import org.logdoc.fairhttp.service.http.Http;
@@ -134,30 +131,29 @@ public class MyController extends Controller {
 }
 ```
 
-Route:
+###### Route:
 ```text
-GET     /api/hello/:myName    controllers.MyController.sayHello(myName, [boolean]first)
+GET     /api/hello/:myName    controllers.MyController.sayHello(myName, first)
 ```
-For variable `first` type must be declared, because handler requires it as boolean, FHS will parse String value.
-Container is omitted because path declaration doesnt contain such name and then FHS will look in Query-string and then - in form and multipart form if there are any. 
+For variable `first` type requires boolean, FHS will parse it from String value; found in, if Container is omitted, then sequentally: Query or Cookies or Form or Multiform.
 
-Equivalent full form:
+###### Equivalent full form:
 ```text
 GET     /api/hello/:myName    controllers.MyController.sayHello([String] myName [Path], [boolean]first[Query])
 ```
 
-Request:  
+###### Request:  
 `curl https://host.com/api/hello/Robert`  
-Response:
+###### Response:
 ```text
 < HTTP/1.1 200 Ok
 < Content-Type: text/plain; charset=utf-8
 Hello again, Robert
 ```
 
-Request:  
+###### Request:  
 `curl https://host.com/api/hello/Robert?first=true`  
-Response:
+###### Response:
 ```text
 < HTTP/1.1 200 Ok
 < Content-Type: text/plain; charset=utf-8
@@ -166,9 +162,9 @@ Hello, Robert
 
 
 -----------------------------
-**Mixed names**  
+##### Mixed names  
 
-Handler:
+###### Handler:
 ```java
 import org.logdoc.fairhttp.service.api.Controller;
 import org.logdoc.fairhttp.service.http.Http;
@@ -191,14 +187,14 @@ public class MyController extends Controller {
 }
 ```
 
-Routes:
+###### Routes:
 ```text
 GET      /api/hello/:name    controllers.MyController.sayHello(name, name[Query], name[Form])
 POST     /api/hello/:name    controllers.MyController.sayHello(name, name[Query], name[Form])
 ```
-Request:  
+###### Request:  
 `curl https://host.com/api/hello/Robert?name=TheKing`  
-Response:
+###### Response:
 ```text
 < HTTP/1.1 200 Ok
 < Content-Type: text/plain; charset=utf-8
@@ -207,9 +203,9 @@ Hello, Robert *TheKing*
 
 
 Lets add one more:  
-Request:  
+###### Request:  
 `curl -X POST https://host.com/api/hello/Robert?name=TheKing -F 'name=Johnson'`  
-Response:
+###### Response:
 ```text
 < HTTP/1.1 200 Ok
 < Content-Type: text/plain; charset=utf-8
@@ -218,10 +214,10 @@ Hello, Robert *TheKing* Johnson
 
 
 ----------------------------
-**Complex types**  
+##### Complex types  
 
 
-DTO:
+###### DTO:
 ```java
 package dto;
 
@@ -230,8 +226,7 @@ public class LoginRequest {
     public String password;
 }
 ```
-Handler:
-
+###### Handler:
 ```java
 import org.logdoc.fairhttp.service.api.Controller;
 import org.logdoc.fairhttp.service.http.Http;
@@ -272,12 +267,12 @@ This handler allows to sign in with different payloads. First, it tries to check
 token is passed via header; then it waits for a login form-data in a body of the request. Finally, if everything is failed, it returns error.
 
 
-Route:
+###### Route:
 ```text
-POST     /api/signin    controllers.MyController.doLogin([dto.LoginRequest][Body], my_token[Cookie], [Request])
+POST     /api/signin    controllers.MyController.doLogin([Body], my_token[Cookie], [Request])
 ```
 
 Lets explain all three arguments:
-1. `[dto.LoginRequest][Body]` - First part is a type of the data. Second - name of the var - is omitted. Third - container is a payload of the request. Name is omitted because whole body treated as an object, there is no need to use names.  
+1. `[Body]` - First part is a type of the data. Second - name of the var - is omitted. Third - container is a payload of the request. Name is omitted because whole body treated as an object, there is no need to use names.  
 2. `my_token[Cookie]` - Look in a cookies for one named `my_token`. Type is missed, because its defaults to String.
 3. `[Request]` - special case of the container, when whole request is passed to a handler.

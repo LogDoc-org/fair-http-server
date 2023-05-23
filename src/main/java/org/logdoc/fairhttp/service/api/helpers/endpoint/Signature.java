@@ -51,10 +51,6 @@ class Signature implements Comparable<Signature> {
         return string.equals(hardPath);
     }
 
-    boolean isPathVar(final String name) {
-        return names != null && names.contains(name);
-    }
-
     Map<String, String> values(final String hardPath) {
         if (pattern == null)
             return Collections.emptyMap();

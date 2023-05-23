@@ -1,6 +1,11 @@
 package org.logdoc.fairhttp.service.api.helpers;
 
+import org.logdoc.fairhttp.service.http.Http;
+
 import java.util.Collection;
+import java.util.Map;
+import java.util.concurrent.CompletionStage;
+import java.util.function.BiFunction;
 
 /**
  * @author Denis Danilin | me@loslobos.ru
@@ -15,5 +20,5 @@ public interface FairHttpServer {
 
     boolean removeEndpoint(String method, String signature);
 
-    boolean addEndpoint(DynamicRoute route);
+    boolean addEndpoint(String method, String endpoint, BiFunction<Http.Request, Map<String, String>, CompletionStage<Http.Response>> callback);
 }

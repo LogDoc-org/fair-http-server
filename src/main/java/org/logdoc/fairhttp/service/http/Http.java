@@ -324,6 +324,14 @@ public class Http {
         public boolean hasHeader(final String header) {
             return !isEmpty(headers.get(header));
         }
+
+        public Map<String, String> queryMap() {
+            return query;
+        }
+
+        public Map<String, String> cookieMap() {
+            return cookies;
+        }
     }
 
     public static class Response {

@@ -21,7 +21,9 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionStage;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.BiFunction;
 import java.util.function.Function;
 
 import static org.logdoc.fairhttp.service.http.statics.BundledRead.PlaceHolder;
@@ -145,14 +147,10 @@ public class Server implements FairHttpServer {
                     return null;
                 };
 
-                if (e.isAsync()) {
-                    CompletableFuture.runAsync(() -> e.handleAsync(request)
-                            .thenApply(rsp -> cors.wrap(request, rsp))
-                            .thenAccept(driver::response)
-                            .exceptionally(errorHandler));
-                } else
-                    CompletableFuture.runAsync(() -> driver.response(cors.wrap(request, e.handle(request))))
-                            .exceptionally(errorHandler);
+                CompletableFuture.runAsync(() -> e.call(request)
+                        .thenApply(rsp -> cors.wrap(request, rsp))
+                        .thenAccept(driver::response)
+                        .exceptionally(errorHandler));
 
                 return;
             } else if (!hasMatchPath && e.pathMatch(hardPath))
@@ -197,7 +195,7 @@ public class Server implements FairHttpServer {
         Endpoint ep;
         for (final DynamicRoute pretend : routes)
             try {
-                endpoints.add((ep = new Endpoint(pretend)));
+                endpoints.add((ep = new Endpoint(pretend.method, pretend.endpoint, pretend.callback)));
                 logger.info("Added endpoint: " + ep);
             } catch (final Exception e) {
                 logger.error("Cant add endpoint '" + pretend + "' :: " + e.getMessage(), e);
@@ -230,7 +228,7 @@ public class Server implements FairHttpServer {
     }
 
     @Override
-    public synchronized boolean addEndpoint(final DynamicRoute route) {
-        return endpoints.add(new Endpoint(route));
+    public synchronized boolean addEndpoint(final String method, final String endpoint, final BiFunction<Http.Request, Map<String, String>, CompletionStage<Http.Response>> callback) {
+        return endpoints.add(new Endpoint(method, endpoint, callback));
     }
 }

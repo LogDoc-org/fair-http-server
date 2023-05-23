@@ -1,12 +1,14 @@
 package org.logdoc.fairhttp.service.api.helpers.endpoint;
 
-import org.logdoc.fairhttp.service.api.helpers.DynamicRoute;
+import org.logdoc.fairhttp.service.api.helpers.endpoint.invokers.RequestInvoker;
 import org.logdoc.fairhttp.service.http.Http;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
+import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.CompletionStage;
+import java.util.function.BiFunction;
+
+import static org.logdoc.fairhttp.service.tools.Strings.notNull;
 
 /**
  * @author Denis Danilin | me@loslobos.ru
@@ -14,19 +16,17 @@ import java.util.concurrent.CompletionStage;
  * FairHttpService ☭ sweat and blood
  */
 public class Endpoint implements Comparable<Endpoint> {
-    private static final Logger logger = LoggerFactory.getLogger(Endpoint.class);
-
     private final String method;
     private final Signature signature;
-    private final Invoker invoker;
+    private final RequestInvoker invoker;
 
-    public Endpoint(final DynamicRoute route) {
-        method = route.method.trim().toUpperCase();
-        signature = new Signature(route.endpoint);
-        invoker = new Invoker(route);
+    public Endpoint(final String method, final String endpoint, final BiFunction<Http.Request, Map<String, String>, CompletionStage<Http.Response>> callback) {
+        this.method = notNull(method).trim().toUpperCase();
+        signature = new Signature(endpoint);
+        invoker = callback::apply;
     }
 
-    public Endpoint(String line) throws Exception {
+    public Endpoint(String line) throws NoSuchMethodException {
         int idx;
 
         if ((idx = line.indexOf('#')) != -1 || (idx = line.indexOf("//")) != -1)
@@ -42,23 +42,17 @@ public class Endpoint implements Comparable<Endpoint> {
 
         method = pretend[0].toUpperCase();
         signature = new Signature(pretend[1]);
-        invoker = new Invoker(pretend[2], signature::isPathVar);
+        invoker = InvokerFactory.build(pretend[2]);
+        if (invoker == null)
+            throw new NoSuchMethodException("Cant build endpoint handler");
     }
 
     public boolean match(final String method, final String hardPath) {
         return this.method.equals(method) && signature.matches(hardPath);
     }
 
-    public boolean isAsync() {
-        return invoker.async;
-    }
-
-    public CompletionStage<? extends Http.Response> handleAsync(final Http.Request request) {
-        return invoker.handleAsync(request, signature.values(request.path()));
-    }
-
-    public Http.Response handle(final Http.Request request) {
-        return invoker.handle(request, signature.values(request.path()));
+    public CompletionStage<? extends Http.Response> call(final Http.Request request) {
+        return invoker.apply(request, signature.values(request.path()));
     }
 
     @Override

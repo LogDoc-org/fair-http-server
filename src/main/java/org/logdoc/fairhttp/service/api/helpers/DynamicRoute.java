@@ -17,41 +17,19 @@ import static org.logdoc.fairhttp.service.tools.Strings.notNull;
 public class DynamicRoute {
     public final String method;
     public final String endpoint;
-    public final BiFunction<Http.Request, Map<String, String>, Http.Response> callback;
-    public final BiFunction<Http.Request, Map<String, String>, CompletionStage<Http.Response>> asyncCallback;
+    public final BiFunction<Http.Request, Map<String, String>, CompletionStage<Http.Response>> callback;
 
     /**
-     * One synced endpoint
-     * @param method HTTP method (GET, POST, PUT, etc)
+     * @param method   HTTP method (GET, POST, PUT, etc)
      * @param endpoint Fully qualified endpoint. If its patterned - it must be Java RegEx synthax compliant and groups must be correctly mappable to callback arguments
      * @param callback invocation of request with mapped path variables by names given in pathVarsNames
-     * @return Fully constructed Route to endpoint
      */
-    public static DynamicRoute sync(final String method, final String endpoint, final BiFunction<Http.Request, Map<String, String>, Http.Response> callback) {
-        return new DynamicRoute(method, endpoint, callback, null);
-    }
-
-    /**
-     * One async endpoint
-     * @param method HTTP method (GET, POST, PUT, etc)
-     * @param endpoint Fully qualified endpoint. If its patterned - it must be Java RegEx synthax compliant and groups must be correctly mappable to callback arguments
-     * @param callback invocation of request with mapped path variables by names given in pathVarsNames
-     * @return Fully constructed Route to endpoint
-     */
-    public static DynamicRoute async(final String method, final String endpoint, final BiFunction<Http.Request, Map<String, String>, CompletionStage<Http.Response>> callback) {
-        return new DynamicRoute(method, endpoint, null, callback);
-    }
-
-    private DynamicRoute(final String method, final String endpoint, final BiFunction<Http.Request, Map<String, String>, Http.Response> callback, final BiFunction<Http.Request, Map<String, String>, CompletionStage<Http.Response>> asyncCallback) {
+    public DynamicRoute(final String method, final String endpoint, final BiFunction<Http.Request, Map<String, String>, CompletionStage<Http.Response>> callback) {
         if (isEmpty(method))
             throw new NullPointerException("Method is not defined");
-
-        if (callback == null && asyncCallback == null)
-            throw new NullPointerException("Callback is not defined");
 
         this.method = notNull(method);
         this.endpoint = isEmpty(endpoint) ? "/" : notNull(endpoint);
         this.callback = callback;
-        this.asyncCallback = asyncCallback;
     }
 }
