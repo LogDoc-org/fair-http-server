@@ -47,11 +47,19 @@ public class DirectRead extends StaticRead {
     }
 
     @Override
-    public Http.Response apply(final String webpath) {
-        final Path p = root.resolve(('/' + webpath).replace('/', File.separatorChar));
+    public Http.Response apply(String webpath) {
+        logger.info("Raw request path  `"+webpath+"`");
+        webpath = webpath.replaceAll("/{2,}", "/");
+        if (webpath.startsWith("/"))
+            webpath = webpath.substring(1);
+        webpath = webpath.replace('/', File.separatorChar);
 
-        if (!Files.exists(p))
+        final Path p = root.resolve(webpath);
+
+        if (!Files.exists(p)) {
+            logger.debug("Not found `"+webpath+"`, trying to map 404...");
             return map404(webpath);
+        }
 
         Http.Response response = pickCached(webpath);
 

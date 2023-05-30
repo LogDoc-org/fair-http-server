@@ -6,6 +6,7 @@ package org.logdoc.fairhttp.service.api.helpers;
  * FairHttpService ☭ sweat and blood
  */
 public interface Singleton {
+    @SuppressWarnings("unchecked")
     default <T> T get() {
         return (T) this;
     }

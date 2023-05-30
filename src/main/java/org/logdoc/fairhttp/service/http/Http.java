@@ -41,6 +41,7 @@ import java.util.*;
 import java.util.function.Consumer;
 import java.util.regex.Pattern;
 
+import static org.logdoc.fairhttp.service.api.Controller.ok;
 import static org.logdoc.fairhttp.service.tools.Bytes.FEED;
 import static org.logdoc.fairhttp.service.tools.Bytes.PROTO;
 import static org.logdoc.fairhttp.service.tools.Strings.isEmpty;
@@ -336,6 +337,9 @@ public class Http {
 
     public static class Response {
         private static final Logger logger = LoggerFactory.getLogger(Response.class);
+        public static final Http.Response jsonSuccess = ok(Json.newObject().put("success", true));
+
+
         private final Map<String, String> headers;
         private final Set<Cookie> cookies;
         private int code;
@@ -424,7 +428,7 @@ public class Http {
                 if (!isEmpty(e.getValue()) && !isEmpty(e.getKey())) {
                     os.write((e.getKey() + ": " + e.getValue()).getBytes(StandardCharsets.UTF_8));
                     os.write(FEED);
-                    logger.debug("Response header '" + e.getKey() + "' :: '"+e.getValue()+"'");
+                    logger.debug("Response header '" + e.getKey() + "' :: '" + e.getValue() + "'");
                 }
 
             for (final Cookie c : cookies) {

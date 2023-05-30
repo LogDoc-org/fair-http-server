@@ -1,6 +1,7 @@
 package org.logdoc.fairhttp.service;
 
 import com.typesafe.config.Config;
+import org.logdoc.fairhttp.service.api.helpers.EagerSingleton;
 import org.logdoc.fairhttp.service.api.helpers.Preloaded;
 import org.logdoc.fairhttp.service.api.helpers.Singleton;
 import org.logdoc.fairhttp.service.http.Http;
@@ -28,6 +29,7 @@ public final class DI {
     private static final ConcurrentMap<Integer, Supplier<?>> builderMap = new ConcurrentHashMap<>(16, .5f, 1);
     private static final Set<Integer> primitiveHashes = ConcurrentHashMap.newKeySet(16);
     private static final Map<Class<?>, Class<?>> substitutes = new HashMap<>();
+    private static final Set<Class<? extends EagerSingleton>> eagers = new HashSet<>(8);
 
     private static Config config;
 
@@ -50,22 +52,33 @@ public final class DI {
         }
     }
 
-    public static synchronized void bind(final Class<?> type, final Class<?> implementation) {
+    public static synchronized <T> void bind(final Class<T> type, final Class<? extends T> implementation) {
         if (type == null || implementation == null)
             throw new NullPointerException();
 
-        substitutes.put(type, implementation);
-        logger.info("Bound type '" + type.getName() + "' to implementation '" + implementation.getName() + "'");
+        if (Singleton.class.isAssignableFrom(implementation))
+            bindAsSingleton(type, implementation);
+        else {
+            substitutes.put(type, implementation);
+            logger.info("Bound type '" + type.getName() + "' to implementation '" + implementation.getName() + "'");
+        }
     }
 
-    public static synchronized <T> void bindAsSingleton(final Class<T> type, final Class<? extends T> implementation) {
+    @SuppressWarnings("unchecked")
+    public static <T> void bindAsSingleton(final Class<T> type, final Class<? extends T> implementation) {
         if (type == null || implementation == null)
             throw new NullPointerException();
+
+        if (!Singleton.class.isAssignableFrom(implementation)) {
+            bind(type, implementation);
+            return;
+        }
 
         substitutes.put(type, implementation);
 
         singletonMap.put(implementation.hashCode(), new Singleton() {
             private T t = null;
+
             @Override
             public T get() {
                 if (t == null)
@@ -76,13 +89,16 @@ public final class DI {
                             logger.error(e.getMessage(), e);
                             return null;
                         }
-                    };
+                    }
 
                 return t;
             }
         });
 
         logger.info("Bound type '" + type.getName() + "' to implementation '" + implementation.getName() + "'");
+
+        if (EagerSingleton.class.isAssignableFrom(implementation))
+            eagers.add((Class<? extends EagerSingleton>) implementation);
     }
 
     public static synchronized <T> void bindProvider(final Class<T> type, final Supplier<? extends T> provider) {
@@ -209,5 +225,20 @@ public final class DI {
         synchronized (DI.class) {
             return initNoSync(clas, loop);
         }
+    }
+
+    static void initEagers() {
+        if (eagers.isEmpty())
+            return;
+
+        eagers.forEach(c -> {
+            try {
+                initNoSync(c, null);
+            } catch (final Exception e) {
+                logger.warn("Cant eager init singleton '"+c.getName()+"' :: " + e.getMessage(), e);
+            }
+        });
+
+        eagers.clear();
     }
 }

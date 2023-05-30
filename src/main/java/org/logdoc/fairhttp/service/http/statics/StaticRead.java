@@ -135,8 +135,10 @@ abstract class StaticRead implements Function<String, Http.Response> {
     }
 
     protected Http.Response map404(final String path) {
-        if (map404Path == null || path.equals(map404Path))
+        if (map404Path == null || path.equals(map404Path)) {
+            logger.info("Not found `"+path+"`");
             return Http.Response.NotFound();
+        }
 
         return apply(map404Path);
     }

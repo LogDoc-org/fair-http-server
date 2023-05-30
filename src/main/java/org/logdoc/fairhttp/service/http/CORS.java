@@ -34,7 +34,7 @@ class CORS {
 
 
     CORS(final Config config) {
-        final Config cors = config.hasPath(CORS) ? config.getConfig(CORS) : null;
+        final Config cors = config != null && config.hasPath(CORS) ? config.getConfig(CORS) : null;
 
         final Set<String> origins = new HashSet<>(), methods = new HashSet<>(), headers = new HashSet<>(), expose = new HashSet<>();
         final boolean allowCreds = cors == null || cors.isEmpty() || !cors.hasPath(CORS_CREDS) || cors.getBoolean(CORS_CREDS);

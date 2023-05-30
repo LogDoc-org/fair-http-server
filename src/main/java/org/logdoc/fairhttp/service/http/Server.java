@@ -46,6 +46,17 @@ public class Server implements FairHttpServer {
     private final Function<String, Http.Response> assets;
     private final CORS cors;
 
+    public Server(final int port) { // minimal
+        this.port = port;
+        this.endpoints = new TreeSet<>();
+
+        densityFactor = new AtomicInteger(2);
+        threadCount = new AtomicInteger(0);
+
+        running = new ArrayList<>(16);
+        assets = new NoStatics();
+        cors = new CORS(null);
+    }
 
     public Server(final Config config) {
         synchronized (Server.class) {
