@@ -20,7 +20,7 @@ import java.util.concurrent.*;
 import java.util.function.Function;
 
 import static org.logdoc.fairhttp.service.tools.ConfigTools.*;
-import static org.logdoc.fairhttp.service.tools.Strings.isEmpty;
+import static org.logdoc.helpers.Texts.isEmpty;
 
 /**
  * @author Denis Danilin | me@loslobos.ru

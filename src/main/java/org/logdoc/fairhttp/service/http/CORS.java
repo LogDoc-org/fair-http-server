@@ -10,8 +10,8 @@ import java.util.stream.Collectors;
 
 import static org.logdoc.fairhttp.service.tools.ConfigPath.CORS;
 import static org.logdoc.fairhttp.service.tools.ConfigPath.*;
-import static org.logdoc.fairhttp.service.tools.Strings.isEmpty;
-import static org.logdoc.fairhttp.service.tools.Strings.notNull;
+import static org.logdoc.helpers.Texts.isEmpty;
+import static org.logdoc.helpers.Texts.notNull;
 
 /**
  * @author Denis Danilin | me@loslobos.ru

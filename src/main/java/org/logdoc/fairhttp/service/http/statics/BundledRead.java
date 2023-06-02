@@ -14,7 +14,7 @@ import java.net.URL;
 import java.time.LocalDateTime;
 import java.util.concurrent.CompletableFuture;
 
-import static org.logdoc.fairhttp.service.tools.Strings.isEmpty;
+import static org.logdoc.helpers.Texts.isEmpty;
 
 /**
  * @author Denis Danilin | me@loslobos.ru

@@ -27,8 +27,8 @@ import java.util.function.BiFunction;
 import java.util.function.Function;
 
 import static org.logdoc.fairhttp.service.http.statics.BundledRead.PlaceHolder;
-import static org.logdoc.fairhttp.service.tools.Strings.isEmpty;
-import static org.logdoc.fairhttp.service.tools.Strings.notNull;
+import static org.logdoc.helpers.Texts.isEmpty;
+import static org.logdoc.helpers.Texts.notNull;
 
 /**
  * @author Denis Danilin | me@loslobos.ru

@@ -1,6 +1,7 @@
 package org.logdoc.fairhttp.service.tools;
 
 import org.logdoc.fairhttp.service.api.helpers.MimeType;
+import org.logdoc.helpers.Texts;
 
 import java.util.HashMap;
 import java.util.List;
@@ -20,21 +21,21 @@ public class MultiForm extends HashMap<String, MultiForm.Part> implements FieldF
     }
 
     public void binData(final String name, final byte[] data, final Map<String, List<String>> headers) {
-        if (Strings.isEmpty(name))
+        if (Texts.isEmpty(name))
             return;
 
         put(name, new Part(null, data, MimeType.BINARY, headers));
     }
 
     public void textData(final String name, final String value) {
-        if (Strings.isEmpty(name))
+        if (Texts.isEmpty(name))
             return;
 
         put(name, new Part(value, null, MimeType.TEXTPLAIN, null));
     }
 
     public void fileData(final String name, final byte[] data, final String contentType) {
-        if (Strings.isEmpty(name))
+        if (Texts.isEmpty(name))
             return;
 
         MimeType type = MimeType.BINARY;

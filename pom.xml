@@ -48,6 +48,12 @@
 
     <dependencies>
         <dependency>
+            <groupId>org.logdoc</groupId>
+            <artifactId>code-helpers</artifactId>
+            <version>1.0.0</version>
+        </dependency>
+
+        <dependency>
             <groupId>com.typesafe</groupId>
             <artifactId>config</artifactId>
             <version>1.4.2</version>

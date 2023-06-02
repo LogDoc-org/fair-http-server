@@ -9,9 +9,9 @@ import org.logdoc.fairhttp.service.tools.MultiForm;
 import java.util.List;
 import java.util.Map;
 
-import static org.logdoc.fairhttp.service.tools.Numbers.*;
-import static org.logdoc.fairhttp.service.tools.Strings.getBoolean;
-import static org.logdoc.fairhttp.service.tools.Strings.isEmpty;
+import static org.logdoc.helpers.Digits.*;
+import static org.logdoc.helpers.Texts.getBoolean;
+import static org.logdoc.helpers.Texts.isEmpty;
 
 /**
  * @author Denis Danilin | me@loslobos.ru

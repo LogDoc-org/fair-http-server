@@ -42,12 +42,10 @@ import java.util.function.Consumer;
 import java.util.regex.Pattern;
 
 import static org.logdoc.fairhttp.service.api.Controller.ok;
-import static org.logdoc.fairhttp.service.tools.Bytes.FEED;
-import static org.logdoc.fairhttp.service.tools.Bytes.PROTO;
-import static org.logdoc.fairhttp.service.tools.Strings.isEmpty;
-import static org.logdoc.fairhttp.service.tools.Strings.notNull;
 import static org.logdoc.fairhttp.service.tools.websocket.protocol.IProtocol.RFC_KEY_UUID;
 import static org.logdoc.fairhttp.service.tools.websocket.protocol.IProtocol.WS_VERSION;
+import static org.logdoc.helpers.Texts.isEmpty;
+import static org.logdoc.helpers.Texts.notNull;
 
 /**
  * @author Denis Danilin | me@loslobos.ru
@@ -55,6 +53,9 @@ import static org.logdoc.fairhttp.service.tools.websocket.protocol.IProtocol.WS_
  * FairHttpService ☭ sweat and blood
  */
 public class Http {
+    private static final byte[] FEED = new byte[]{'\r', '\n'};
+    private static final byte[] PROTO = "HTTP/1.1".getBytes(StandardCharsets.US_ASCII);
+
     public enum SameSite {
         STRICT("Strict"),
         LAX("Lax"),

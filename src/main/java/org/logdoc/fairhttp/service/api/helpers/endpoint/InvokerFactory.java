@@ -4,8 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import org.logdoc.fairhttp.service.api.Controller;
 import org.logdoc.fairhttp.service.api.helpers.endpoint.invokers.*;
 import org.logdoc.fairhttp.service.http.Http;
-import org.logdoc.fairhttp.service.tools.ClassWrapper;
-import org.logdoc.fairhttp.service.tools.Strings;
+import org.logdoc.helpers.Texts;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -14,8 +13,9 @@ import java.util.*;
 import java.util.stream.Collectors;
 
 import static org.logdoc.fairhttp.service.api.helpers.endpoint.invokers.ArgumentDefinition.Container.*;
-import static org.logdoc.fairhttp.service.tools.Strings.isEmpty;
-import static org.logdoc.fairhttp.service.tools.Strings.notNull;
+import static org.logdoc.helpers.Reflects.getAllMethods;
+import static org.logdoc.helpers.Texts.isEmpty;
+import static org.logdoc.helpers.Texts.notNull;
 
 /**
  * @author Denis Danilin | me@loslobos.ru
@@ -162,7 +162,7 @@ class InvokerFactory {
         final Class<? extends Controller> cls = (Class<? extends Controller>) Class.forName(clsName);
         Method method = null;
 
-        final Set<Method> allMethods = ClassWrapper.getAllMethods(cls);
+        final Set<Method> allMethods = getAllMethods(cls);
         for (final Method m : allMethods)
             if (m.getName().equals(mthName)) {
                 if (args == null) {
@@ -219,7 +219,7 @@ class InvokerFactory {
         Method targetMethod;
 
         private Args(final String data) {
-            if (!Strings.isEmpty(data))
+            if (!Texts.isEmpty(data))
                 Arrays.stream(data.split(","))
                         .map(d -> d.replaceAll("\\s", ""))
                         .filter(d -> !d.trim().isBlank())

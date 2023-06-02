@@ -8,7 +8,7 @@ import java.util.Objects;
 import java.util.concurrent.CompletionStage;
 import java.util.function.BiFunction;
 
-import static org.logdoc.fairhttp.service.tools.Strings.notNull;
+import static org.logdoc.helpers.Texts.notNull;
 
 /**
  * @author Denis Danilin | me@loslobos.ru

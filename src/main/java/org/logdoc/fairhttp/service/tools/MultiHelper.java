@@ -8,12 +8,20 @@ import java.nio.charset.StandardCharsets;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
-import static org.logdoc.fairhttp.service.tools.Strings.isEmpty;
-import static org.logdoc.fairhttp.service.tools.Strings.notNull;
+import static org.logdoc.helpers.Bytes.copy;
+import static org.logdoc.helpers.Texts.*;
 
 public class MultiHelper {
     public static final byte CR = 0x0D, LF = 0x0A, DASH = 0x2D;
     public static final byte[] headerSeparator = {CR, LF, CR, LF}, fieldSeparator = {CR, LF}, streamEnd = {DASH, DASH}, boundaryPrefix = {CR, LF, DASH, DASH};
+
+    private static final int MimeShift = Byte.SIZE / 2;
+    private static final String MimeASCII = "US-ASCII",
+            MimeBase64 = "B",
+            MimeQuotedPrintable = "Q",
+            MimeEncodedMarker = "=?",
+            MimeEncodedEnd = "?=",
+            MimeWhitespace = " \t\r\n";
 
     public static void process(final MultiHandler handler, final MimeType contentType, final byte[] input) throws Exception {
         processBoundary(handler, getBoundary(contentType), input);
@@ -335,7 +343,7 @@ public class MultiHelper {
                     paramValue = parseQuotedToken(new char[]{separator});
 
                     if (paramValue != null)
-                        paramValue = Strings.mimeDecodeText(paramValue);
+                        paramValue = mimeDecodeText(paramValue);
 
                 }
                 if (hasChar() && (chars[pos] == separator))
@@ -353,6 +361,156 @@ public class MultiHelper {
         }
 
     }
+
+    private static String mimeDecodeText(final String text) {
+        if (!text.contains(MimeEncodedMarker))
+            return text;
+
+        int offset = 0;
+        final int endOffset = text.length();
+
+        int startWhiteSpace = -1, endWhiteSpace = -1;
+
+        final StringBuilder decodedText = new StringBuilder(text.length());
+
+        boolean previousTokenEncoded = false;
+
+        while (offset < endOffset) {
+            char ch = text.charAt(offset);
+
+            if (MimeWhitespace.indexOf(ch) != -1) {
+                startWhiteSpace = offset;
+
+                while (offset < endOffset) {
+                    ch = text.charAt(offset);
+                    if (MimeWhitespace.indexOf(ch) != -1)
+                        offset++;
+                    else {
+                        endWhiteSpace = offset;
+                        break;
+                    }
+                }
+            } else {
+                int wordStart = offset;
+
+                while (offset < endOffset) {
+                    ch = text.charAt(offset);
+                    if (MimeWhitespace.indexOf(ch) == -1)
+                        offset++;
+                    else
+                        break;
+                }
+                final String word = text.substring(wordStart, offset);
+
+                if (word.startsWith(MimeEncodedMarker)) {
+                    try {
+                        final String decodedWord = mimeDecodeWord(word);
+
+                        if (!previousTokenEncoded && startWhiteSpace != -1) {
+                            decodedText.append(text, startWhiteSpace, endWhiteSpace);
+                            startWhiteSpace = -1;
+                        }
+                        previousTokenEncoded = true;
+                        decodedText.append(decodedWord);
+                        continue;
+                    } catch (final Exception ignore) {
+                    }
+                }
+
+                if (startWhiteSpace != -1) {
+                    decodedText.append(text, startWhiteSpace, endWhiteSpace);
+                    startWhiteSpace = -1;
+                }
+                previousTokenEncoded = false;
+                decodedText.append(word);
+            }
+        }
+
+        return decodedText.toString();
+    }
+
+    private static String mimeDecodeWord(final String word) throws Exception {
+        if (!word.startsWith(MimeEncodedMarker))
+            throw new Exception("Invalid RFC 2047 encoded-word: " + word);
+
+        int charsetPos = word.indexOf('?', 2);
+        if (charsetPos == -1)
+            throw new Exception("Missing charset in RFC 2047 encoded-word: " + word);
+
+        String charset = word.substring(2, charsetPos).toLowerCase();
+
+        int encodingPos = word.indexOf('?', charsetPos + 1);
+        if (encodingPos == -1)
+            throw new Exception("Missing encoding in RFC 2047 encoded-word: " + word);
+
+        String encoding = word.substring(charsetPos + 1, encodingPos);
+
+        int encodedTextPos = word.indexOf(MimeEncodedEnd, encodingPos + 1);
+        if (encodedTextPos == -1)
+            throw new Exception("Missing encoded text in RFC 2047 encoded-word: " + word);
+
+        String encodedText = word.substring(encodingPos + 1, encodedTextPos);
+
+        if (encodedText.isEmpty())
+            return "";
+
+        try {
+            final ByteArrayOutputStream out = new ByteArrayOutputStream(encodedText.length());
+
+            byte[] encodedData = encodedText.getBytes(MimeASCII);
+
+            switch (encoding) {
+                case MimeBase64:
+                    copy(Base64.getDecoder().wrap(new ByteArrayInputStream(encodedData)), out);
+                    break;
+                case MimeQuotedPrintable:  // maybe quoted printable.
+                    mimeDecodeQP(encodedData, out);
+                    break;
+                default:
+                    throw new UnsupportedEncodingException("Unknown RFC 2047 encoding: " + encoding);
+            }
+
+            return out.toString(mimeCharset(charset));
+        } catch (IOException e) {
+            throw new UnsupportedEncodingException("Invalid RFC 2047 encoding");
+        }
+    }
+
+    private static void mimeDecodeQP(byte[] data, final OutputStream out) throws IOException {
+        int off = 0;
+        int length = data.length;
+        int endOffset = off + length;
+        int bytesWritten = 0;
+
+        while (off < endOffset) {
+            byte ch = data[off++];
+
+            if (ch == '_')
+                out.write(' ');
+            else if (ch == '=') {
+                if (off + 1 >= endOffset)
+                    throw new IOException("Invalid quoted printable encoding; truncated escape sequence");
+
+                byte b1 = data[off++];
+                byte b2 = data[off++];
+
+                if (b1 == '\r')
+                    if (b2 != '\n') {
+                        throw new IOException("Invalid quoted printable encoding; CR must be followed by LF");
+                    } else {
+                        int c1 = hexToBinary(b1);
+                        int c2 = hexToBinary(b2);
+                        out.write((c1 << MimeShift) | c2);
+                        bytesWritten++;
+                    }
+            } else {
+                out.write(ch);
+                bytesWritten++;
+            }
+        }
+
+    }
+
 
     public interface MultiHandler {
 

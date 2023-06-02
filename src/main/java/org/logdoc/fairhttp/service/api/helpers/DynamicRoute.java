@@ -6,8 +6,8 @@ import java.util.Map;
 import java.util.concurrent.CompletionStage;
 import java.util.function.BiFunction;
 
-import static org.logdoc.fairhttp.service.tools.Strings.isEmpty;
-import static org.logdoc.fairhttp.service.tools.Strings.notNull;
+import static org.logdoc.helpers.Texts.isEmpty;
+import static org.logdoc.helpers.Texts.notNull;
 
 /**
  * @author Denis Danilin | me@loslobos.ru
