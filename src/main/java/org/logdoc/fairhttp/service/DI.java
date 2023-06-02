@@ -105,6 +105,11 @@ public final class DI {
         builderMap.put(type.hashCode(), provider);
     }
 
+    public static boolean isGainable(final Class<?> clas) {
+        int hash;
+        return clas != null && (Config.class.isAssignableFrom(clas) || substitutes.get(clas) != null || !clas.isInterface() || singletonMap.get((hash = clas.hashCode())) != null || primitiveHashes.contains(hash));
+    }
+
     public static <T> T gain(final Class<T> clas) {
         return gain(clas, true, null);
     }
