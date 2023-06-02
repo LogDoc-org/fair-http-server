@@ -2,7 +2,6 @@ package org.logdoc.fairhttp.service.http;
 
 import com.typesafe.config.Config;
 import org.logdoc.fairhttp.service.api.helpers.DynamicRoute;
-import org.logdoc.fairhttp.service.api.helpers.FairHttpServer;
 import org.logdoc.fairhttp.service.api.helpers.MimeType;
 import org.logdoc.fairhttp.service.api.helpers.endpoint.Endpoint;
 import org.logdoc.fairhttp.service.http.statics.BundledRead;
@@ -35,7 +34,7 @@ import static org.logdoc.helpers.Texts.notNull;
  * 03.02.2023 17:39
  * FairHttpService ☭ sweat and blood
  */
-public class Server implements FairHttpServer {
+public class Server {
     private static final Logger logger = LoggerFactory.getLogger(Server.class);
     private static Server backRef = null;
 
@@ -201,7 +200,6 @@ public class Server implements FairHttpServer {
         return (int) Math.pow(2, densityFactor.get());
     }
 
-    @Override
     public synchronized void setupDynamicEndpoints(final Collection<DynamicRoute> routes) {
         Endpoint ep;
         for (final DynamicRoute pretend : routes)
@@ -214,7 +212,6 @@ public class Server implements FairHttpServer {
 
     }
 
-    @Override
     public synchronized void setupConfigEndpoints(final Collection<String> raw) {
         Endpoint ep;
         for (final String pretend : raw)
@@ -227,7 +224,6 @@ public class Server implements FairHttpServer {
             }
     }
 
-    @Override
     public synchronized boolean removeEndpoint(final String method, final String signature) {
         for (final Endpoint e : endpoints)
             if (e.equals(method, signature)) {
@@ -238,7 +234,6 @@ public class Server implements FairHttpServer {
         return false;
     }
 
-    @Override
     public synchronized boolean addEndpoint(final String method, final String endpoint, final BiFunction<Http.Request, Map<String, String>, CompletionStage<Http.Response>> callback) {
         return endpoints.add(new Endpoint(method, endpoint, callback));
     }
