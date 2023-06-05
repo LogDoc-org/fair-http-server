@@ -59,7 +59,8 @@ public final class DI {
         if (Singleton.class.isAssignableFrom(implementation))
             bindAsSingleton(type, implementation);
         else {
-            substitutes.put(type, implementation);
+            if (!type.equals(implementation))
+                substitutes.put(type, implementation);
             logger.info("Bound type '" + type.getName() + "' to implementation '" + implementation.getName() + "'");
         }
     }
@@ -74,7 +75,8 @@ public final class DI {
             return;
         }
 
-        substitutes.put(type, implementation);
+        if (!type.equals(implementation))
+            substitutes.put(type, implementation);
 
         singletonMap.put(implementation.hashCode(), new Singleton() {
             private T t = null;
@@ -240,7 +242,7 @@ public final class DI {
             try {
                 initNoSync(c, null);
             } catch (final Exception e) {
-                logger.warn("Cant eager init singleton '"+c.getName()+"' :: " + e.getMessage(), e);
+                logger.warn("Cant eager init singleton '" + c.getName() + "' :: " + e.getMessage(), e);
             }
         });
 
