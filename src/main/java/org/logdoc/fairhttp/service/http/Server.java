@@ -8,6 +8,7 @@ import org.logdoc.fairhttp.service.http.statics.BundledRead;
 import org.logdoc.fairhttp.service.http.statics.DirectRead;
 import org.logdoc.fairhttp.service.http.statics.NoStatics;
 import org.logdoc.fairhttp.service.tools.ConfigPath;
+import org.logdoc.fairhttp.service.tools.ConfigTools;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -74,7 +75,7 @@ public class Server {
 
         running = new ArrayList<>(16);
 
-        final Config staticsCfg = config.hasPath("fair.http.statics") && !config.getIsNull("fair.http.statics") ? config.getConfig("fair.http.statics") : null;
+        final Config staticsCfg = ConfigTools.sureConf(config, "fair.http.statics");
         final String dir = staticsCfg != null && staticsCfg.hasPath("root") && !staticsCfg.getIsNull("root") ? notNull(staticsCfg.getString("root")) : null;
 
         Function<String, Http.Response> assets0 = new NoStatics();
@@ -88,7 +89,8 @@ public class Server {
                     if (Files.exists(p) && Files.isDirectory(p))
                         assets0 = new DirectRead(staticsCfg, dir);
                 }
-            }
+            } else
+                logger.debug("No statics: dir is empty `"+dir+"`");
         } catch (final IllegalStateException ise) {
             logger.debug("Cant setup static assets: " + ise.getMessage() + ", noop.");
             assets0 = new NoStatics();

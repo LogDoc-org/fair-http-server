@@ -29,7 +29,7 @@ public class StartFairServer {
 
     @SuppressWarnings("unchecked")
     private void start() {
-        final Config c = ConfigFactory.defaultApplication().withFallback(ConfigFactory.defaultReference());
+        final Config c = ConfigFactory.defaultApplication().withFallback(ConfigFactory.defaultReference()).resolve();
         DI.init(c);
 
         final List<String> endpoints = new ArrayList<>(16);
