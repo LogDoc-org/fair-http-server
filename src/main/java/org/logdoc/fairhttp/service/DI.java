@@ -12,8 +12,6 @@ import java.lang.reflect.Constructor;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Modifier;
 import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentMap;
 import java.util.function.Supplier;
 
 
@@ -25,12 +23,10 @@ import java.util.function.Supplier;
 public final class DI {
     private static final Logger logger = LoggerFactory.getLogger(DI.class);
 
-    private static final ConcurrentMap<Integer, Singleton> singletonMap = new ConcurrentHashMap<>(16, .5f, 1);
-    private static final ConcurrentMap<Integer, Supplier<?>> builderMap = new ConcurrentHashMap<>(16, .5f, 1);
-    private static final Set<Integer> primitiveHashes = ConcurrentHashMap.newKeySet(16);
-    private static final Map<Class<?>, Class<?>> substitutes = new HashMap<>();
     private static final Set<Class<? extends EagerSingleton>> eagers = new HashSet<>(8);
-
+    private static final Map<Class<?>, Class<?>> bindMap = new HashMap<>(64);
+    private static final Map<Integer, Supplier<?>> knownConstructors = new HashMap<>();
+    private static final Map<Integer, Object> singleMap = new HashMap<>();
     private static Config config;
 
     static void init(final Config config0) {
@@ -52,200 +48,169 @@ public final class DI {
         }
     }
 
-    public static synchronized <T> void bind(final Class<T> type, final Class<? extends T> implementation) {
-        if (type == null || implementation == null)
-            throw new NullPointerException();
-
-        if (Singleton.class.isAssignableFrom(implementation))
-            bindAsSingleton(type, implementation);
-        else {
-            if (!type.equals(implementation))
-                substitutes.put(type, implementation);
-            logger.info("Bound type '" + type.getName() + "' to implementation '" + implementation.getName() + "'");
-        }
-    }
-
-    @SuppressWarnings("unchecked")
-    public static <T> void bindAsSingleton(final Class<T> type, final Class<? extends T> implementation) {
-        if (type == null || implementation == null)
-            throw new NullPointerException();
-
-        if (!Singleton.class.isAssignableFrom(implementation)) {
-            bind(type, implementation);
-            return;
-        }
-
-        if (!type.equals(implementation))
-            substitutes.put(type, implementation);
-
-        singletonMap.put(implementation.hashCode(), new Singleton() {
-            private T t = null;
-
-            @Override
-            public T get() {
-                if (t == null)
-                    synchronized (this) {
-                        try {
-                            t = initSync(implementation, null);
-                        } catch (InvocationTargetException | InstantiationException | IllegalAccessException e) {
-                            logger.error(e.getMessage(), e);
-                            return null;
-                        }
-                    }
-
-                return t;
-            }
-        });
-
-        logger.info("Bound type '" + type.getName() + "' to implementation '" + implementation.getName() + "'");
-
-        if (EagerSingleton.class.isAssignableFrom(implementation))
-            eagers.add((Class<? extends EagerSingleton>) implementation);
-    }
-
-    public static synchronized <T> void bindProvider(final Class<T> type, final Supplier<? extends T> provider) {
-        builderMap.put(type.hashCode(), provider);
-    }
-
-    public static boolean isGainable(final Class<?> clas) {
-        int hash;
-        return clas != null && (Config.class.isAssignableFrom(clas) || substitutes.get(clas) != null || !clas.isInterface() || singletonMap.get((hash = clas.hashCode())) != null || primitiveHashes.contains(hash));
-    }
-
-    public static <T> T gain(final Class<T> clas) {
-        return gain(clas, true, null);
-    }
-
-    @SuppressWarnings("unchecked")
-    private static <T> T gain(final Class<T> clas, final boolean sync, final Class<?> loop) {
-        if (clas == null)
-            return null;
-
-        if (clas.equals(Config.class))
-            return (T) config;
-
-        if (sync && loop == null) { // side top-level check
-            Class<?> substit;
-
-            if ((substit = substitutes.get(clas)) != null)
-                return (T) gain(substit, true, null);
-        }
-
-        final int hash = clas.hashCode();
-        final boolean single = Singleton.class.isAssignableFrom(clas);
-
-        try {
-            T tmp;
-            if (single && (tmp = (T) singletonMap.get(hash)) != null)
-                return tmp == ((Singleton) tmp).get() ? tmp : ((Singleton) tmp).get();
-
-            Supplier<T> bld;
-            if (!single && (bld = (Supplier<T>) builderMap.get(hash)) != null)
-                return bld.get();
-
-            if (primitiveHashes.contains(hash))
-                tmp = clas.getDeclaredConstructor().newInstance();
-            else
-                tmp = sync ? initSync(clas, loop) : initNoSync(clas, loop);
-
-            if (tmp == null)
-                throw new Exception("No valid constructor found for class '" + clas.getName() + "'. E.g. public empty constructor or with classpath-known arguments.");
-
-            if (single)
-                singletonMap.put(hash, (Singleton) tmp);
-
-            return tmp;
-        } catch (final RuntimeException any) {
-            throw any;
-        } catch (final Throwable any) {
-            throw new RuntimeException(any);
-        }
-    }
-
-    @SuppressWarnings("unchecked")
-    private static <T> T initNoSync(final Class<T> clas, final Class<?> loop) throws InvocationTargetException, InstantiationException, IllegalAccessException {
-        final Constructor<T>[] ctrs = (Constructor<T>[]) clas.getDeclaredConstructors();
-
-        for (final Constructor<T> c : ctrs)
-            if (!c.isSynthetic() && c.getParameterCount() == 0 && Modifier.isPublic(c.getModifiers())) {
-                primitiveHashes.add(clas.hashCode());
-                return c.newInstance();
-            }
-
-        List<Object> argz;
-
-        CYCLE:
-        for (final Constructor<T> c : ctrs)
-            if (!c.isSynthetic() && Modifier.isPublic(c.getModifiers())) {
-                final Class<?>[] args = c.getParameterTypes();
-                argz = new ArrayList<>(args.length);
-
-                for (final Class<?> arg : args) {
-                    if (arg == null || arg.isPrimitive() || arg.isArray() || Map.class.isAssignableFrom(arg) || Collection.class.isAssignableFrom(arg) || arg.equals(clas) || Http.Request.class.isAssignableFrom(arg))
-                        continue CYCLE;
-
-                    if (arg.equals(loop)) {
-                        logger.error("Found cross loop dependancy between '" + arg.getName() + "' and '" + loop.getName() + "' classes");
-                        return null;
-                    }
-
-                    if (arg.equals(Config.class))
-                        argz.add(config);
-                    else {
-                        Object o = null;
-                        try {
-                            o = gain(arg, false, clas);
-                        } catch (final Exception ignore) {
-                        }
-
-                        if (o != null)
-                            argz.add(o);
-                        else
-                            continue CYCLE;
-                    }
-                }
-
-
-                if (argz.size() != c.getParameterCount()) {
-                    logger.warn("Cant build constructors args: " + clas.getName() + " :: " + c);
-                    continue;
-                }
-
-                final List<Object> finalArgz = argz;
-                builderMap.put(clas.hashCode(), () -> {
-                    try {
-                        return c.newInstance(finalArgz.toArray());
-                    } catch (InstantiationException | IllegalAccessException | InvocationTargetException e) {
-                        logger.error(e.getMessage(), e);
-                    }
-
-                    return null;
-                });
-
-                return (T) builderMap.get(clas.hashCode()).get();
-            }
-
-        return null;
-    }
-
-    private static <T> T initSync(final Class<T> clas, final Class<?> loop) throws InvocationTargetException, InstantiationException, IllegalAccessException {
-        synchronized (DI.class) {
-            return initNoSync(clas, loop);
-        }
-    }
-
-    static void initEagers() {
+    public static synchronized void initEagers() {
         if (eagers.isEmpty())
             return;
 
+        final Collection<Class<?>> init = Collections.emptyList();
         eagers.forEach(c -> {
             try {
-                initNoSync(c, null);
+                gainInternal(c, init);
             } catch (final Exception e) {
                 logger.warn("Cant eager init singleton '" + c.getName() + "' :: " + e.getMessage(), e);
             }
         });
 
         eagers.clear();
+    }
+
+    public static synchronized <A> void bindProvider(final Class<A> type, final Supplier<? extends A> provider) {
+        if (type == null)
+            throw new NullPointerException("Type is null");
+
+        if (provider == null)
+            throw new NullPointerException("Provider is null");
+
+        knownConstructors.put(type.hashCode(), provider);
+    }
+
+    @SuppressWarnings("unchecked")
+    public static synchronized <A, B extends A> void bind(final Class<A> type, final Class<B> implementation) {
+        if (type == null)
+            throw new NullPointerException("Type is null");
+
+        if (implementation == null)
+            throw new NullPointerException("Implementation is null");
+
+        if (EagerSingleton.class.isAssignableFrom(implementation))
+            eagers.add((Class<? extends EagerSingleton>) implementation);
+
+        if (!type.equals(implementation))
+            bindMap.put(type, implementation);
+
+        logger.debug("Bound type '" + type.getName() + "' to implementation '" + implementation.getName() + "'");
+    }
+
+    public static <A> A gain(final Class<A> clas) {
+        return gainInternal(clas, Collections.emptyList());
+    }
+
+    @SuppressWarnings("unchecked")
+    private static <A> A gainInternal(final Class<A> clas, final Collection<Class<?>> ancestors) {
+        if (clas == null)
+            return null;
+
+        final Class<?> c = bindMap.get(clas);
+        if (c != null) {
+            if (ancestors.contains(c))
+                return null;
+
+            final List<Class<?>> ancestorz = new ArrayList<>(ancestors);
+            ancestorz.add(clas);
+
+            return (A) gainInternal(c, ancestorz);
+        }
+
+        final boolean singleton = Singleton.class.isAssignableFrom(clas);
+        final int hash = clas.hashCode();
+
+        A value = null;
+
+        if (singleton)
+            value = (A) singleMap.get(hash);
+
+        boolean missed = value == null;
+
+        if (missed)
+            value = build(clas, hash, ancestors);
+
+        if (value == null)
+            return null;
+
+        if (singleton && missed)
+            synchronized (singleMap) {
+                singleMap.put(hash, value);
+            }
+
+        return value;
+    }
+
+    @SuppressWarnings("unchecked")
+    private static <A> A build(final Class<A> clas, final int hash, final Collection<Class<?>> ancestors) {
+        Supplier<?> constructor;
+        if ((constructor = knownConstructors.get(hash)) != null)
+            return (A) constructor.get();
+
+        final Constructor<A>[] ctrs = (Constructor<A>[]) clas.getDeclaredConstructors();
+
+        for (final Constructor<A> c : ctrs)
+            if (!c.isSynthetic() && c.getParameterCount() == 0 && Modifier.isPublic(c.getModifiers())) {
+                constructor = () -> {
+                    try {
+                        return c.newInstance();
+                    } catch (final Exception e) {
+                        logger.error("!!! Cant build object of type '" + clas.getName() + "' :: " + e.getMessage(), e);
+                        return null;
+                    }
+                };
+
+                break;
+            }
+
+        if (constructor == null) {
+            final List<Class<?>> ancestorz = new ArrayList<>(ancestors);
+            ancestorz.add(clas);
+            List<Object> argz;
+
+            CYCLE:
+            for (final Constructor<A> c : ctrs)
+                if (!c.isSynthetic() && Modifier.isPublic(c.getModifiers())) {
+                    final Class<?>[] args = c.getParameterTypes();
+                    argz = new ArrayList<>(args.length);
+
+                    for (final Class<?> arg : args) {
+                        if (arg == null || arg.isPrimitive() || arg.isArray() || ancestors.contains(arg) || Map.class.isAssignableFrom(arg) || Collection.class.isAssignableFrom(arg) || arg.equals(clas) || Http.Request.class.isAssignableFrom(arg))
+                            continue CYCLE;
+
+                        if (arg.equals(Config.class))
+                            argz.add(config);
+                        else {
+                            Object o = gainInternal(arg, ancestorz);
+
+                            if (o != null)
+                                argz.add(o);
+                            else
+                                continue CYCLE;
+                        }
+                    }
+
+                    if (argz.size() != c.getParameterCount()) {
+                        logger.warn("Cant build constructors args: " + clas.getName() + " :: " + c);
+                        continue;
+                    }
+
+                    final List<Object> finalArgz = argz;
+                    constructor = () -> {
+                        try {
+                            return c.newInstance(finalArgz.toArray());
+                        } catch (final InstantiationException | IllegalAccessException | InvocationTargetException e) {
+                            logger.error("!!! Cant build object of type '" + clas.getName() + "' :: " + e.getMessage(), e);
+                            return null;
+                        }
+                    };
+                    break;
+                }
+        }
+
+        if (constructor == null) {
+            logger.error("!!! Cant build object of type '" + clas.getName() + "' :: no valid constructor found.");
+            return null;
+        }
+
+        synchronized (knownConstructors) {
+            knownConstructors.put(hash, constructor);
+        }
+
+        return (A) constructor.get();
     }
 }
