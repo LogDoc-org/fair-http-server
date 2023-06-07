@@ -32,6 +32,7 @@ public final class DI {
     static void init(final Config config0) {
         config = config0;
         logger.info("Initializing");
+        bindProvider(Config.class, () -> config);
     }
 
     static void preload(final Class<Preloaded> clas) {
@@ -78,6 +79,11 @@ public final class DI {
     public static synchronized <A, B extends A> void bind(final Class<A> type, final Class<B> implementation) {
         if (type == null)
             throw new NullPointerException("Type is null");
+
+        if (bindMap.containsKey(type)) {
+            logger.warn("Type '" + type.getName() + "' already bound to '" + bindMap.get(type).getName() + "' and cant be re-bound to '" + implementation.getName() + "'");
+            return;
+        }
 
         if (implementation == null)
             throw new NullPointerException("Implementation is null");
