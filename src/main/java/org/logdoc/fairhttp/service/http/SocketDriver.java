@@ -148,7 +148,11 @@ public class SocketDriver {
                                         .filter(s -> s.contains("="))
                                         .forEach(c -> {
                                             final int i = c.indexOf('=');
-                                            request.cookies.put(c.substring(0, i).trim(), c.substring(i + 2, c.length() - 1).trim());
+                                            try {
+                                                request.cookies.put(c.substring(0, i).trim(), c.substring(i + 2, c.length() - 1).trim());
+                                            } catch (final Exception e) {
+                                                logger.warn("Broken cookie piece: `" + c + "`; cookie line is: `" + headerLine + "`");
+                                            }
                                         });
                         }
 
