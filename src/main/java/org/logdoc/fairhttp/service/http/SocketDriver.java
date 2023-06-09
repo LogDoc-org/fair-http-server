@@ -2,6 +2,7 @@ package org.logdoc.fairhttp.service.http;
 
 import org.logdoc.fairhttp.service.api.helpers.Headers;
 import org.logdoc.fairhttp.service.api.helpers.MimeType;
+import org.logdoc.fairhttp.service.tools.HttpBinStreaming;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -119,58 +120,19 @@ public class SocketDriver {
     }
 
     private Consumer<Byte> headersConsume() {
-        return b -> {
-            if (b == '\n') {
-                final String headerLine = tmp.toString(StandardCharsets.UTF_8).trim();
-                tmp.reset();
-                final int idx;
-                if ((idx = headerLine.indexOf(':')) != -1) {
-                    String name = headerLine.substring(0, idx).trim();
-
-                    if (!name.isEmpty()) {
-                        final String value = notNull(headerLine.substring(idx + 1));
-
-                        if (name.equalsIgnoreCase(Headers.ContentLength))
-                            request.knownBodyLength = getInt(value);
-                        else if (name.equalsIgnoreCase(Headers.TransferEncoding))
-                            request.chunked = "chunked".equalsIgnoreCase(value);
-                        else if (name.equalsIgnoreCase(Headers.ContentType))
-                            try {
-                                request.contentType = new MimeType(value);
-                            } catch (Exception e) {
-                                logger.warn(e.getMessage(), e);
-                            }
-                        else if (name.equalsIgnoreCase(Headers.RequestCookies)) {
-                            name = Headers.RequestCookies;
-
-                            if (!value.isEmpty())
-                                Arrays.stream(value.split(";"))
-                                        .filter(s -> s.contains("="))
-                                        .forEach(c -> {
-                                            final int i = c.indexOf('=');
-                                            try {
-                                                request.cookies.put(c.substring(0, i).trim(), c.substring(i + 2, c.length() - 1).trim());
-                                            } catch (final Exception e) {
-                                                logger.warn("Broken cookie piece: `" + c + "`; cookie line is: `" + headerLine + "`");
-                                            }
-                                        });
-                        }
-
-                        request.headers.put(name, value);
-                        logger.debug("Request header: '" + name + "' = '" + value + "'");
-                    }
-                } else if (headerLine.isEmpty()) {
-                    logger.debug("Request headers done, body reader ready");
-                    tmp.reset();
+        return HttpBinStreaming.headersTicker(
+                tmp,
+                len -> request.knownBodyLength = len,
+                chunked -> request.chunked = chunked,
+                cType -> request.contentType = cType,
+                (name, header) -> request.headers.put(name, header),
+                (name, cookie) -> request.cookies.put(name, cookie),
+                unused -> consumer = headersConsume(),
+                unused -> {
                     state(STATE.REQUEST_READY);
                     consumer = tmp::write;
-                    return;
                 }
-
-                consumer = headersConsume();
-            } else
-                tmp.write(b);
-        };
+        );
     }
 
     @Override

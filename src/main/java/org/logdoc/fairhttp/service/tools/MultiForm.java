@@ -20,7 +20,7 @@ public class MultiForm extends HashMap<String, MultiForm.Part> implements FieldF
         return o == null ? null : o.value;
     }
 
-    public void binData(final String name, final byte[] data, final Map<String, List<String>> headers) {
+    public void binData(final String name, final byte[] data, final Map<String, String> headers) {
         if (Texts.isEmpty(name))
             return;
 
@@ -34,23 +34,20 @@ public class MultiForm extends HashMap<String, MultiForm.Part> implements FieldF
         put(name, new Part(value, null, MimeType.TEXTPLAIN, null));
     }
 
-    public void fileData(final String name, final byte[] data, final String contentType) {
+    public void fileData(final String name, final String fileName, final byte[] data, final MimeType contentType) {
         if (Texts.isEmpty(name))
             return;
 
-        MimeType type = MimeType.BINARY;
-        try { type = new MimeType(contentType); } catch (final Exception ignore) { }
-
-        put(name, new Part(null, data, type, null));
+        put(name, new Part(fileName, data, contentType == null ? MimeType.BINARY : contentType, null));
     }
 
     public static class Part {
         public final String value;
         public final byte[] data;
         public final MimeType mimeType;
-        public final Map<String, List<String>> headers;
+        public final Map<String, String> headers;
 
-        private Part(final String value, final byte[] data, final MimeType mimeType, final Map<String, List<String>> headers) {
+        private Part(final String value, final byte[] data, final MimeType mimeType, final Map<String, String> headers) {
             this.value = value;
             this.data = data;
             this.mimeType = mimeType;

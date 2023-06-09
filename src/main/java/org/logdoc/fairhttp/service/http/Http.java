@@ -4,10 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.logdoc.fairhttp.service.api.helpers.Headers;
 import org.logdoc.fairhttp.service.api.helpers.MimeType;
-import org.logdoc.fairhttp.service.tools.Form;
-import org.logdoc.fairhttp.service.tools.Json;
-import org.logdoc.fairhttp.service.tools.MultiForm;
-import org.logdoc.fairhttp.service.tools.MultiHelper;
+import org.logdoc.fairhttp.service.tools.*;
 import org.logdoc.fairhttp.service.tools.websocket.Opcode;
 import org.logdoc.fairhttp.service.tools.websocket.extension.DefaultExtension;
 import org.logdoc.fairhttp.service.tools.websocket.extension.IExtension;
@@ -38,10 +35,13 @@ import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
 import java.util.*;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 import java.util.regex.Pattern;
 
 import static org.logdoc.fairhttp.service.api.Controller.ok;
+import static org.logdoc.fairhttp.service.tools.HttpBinStreaming.getBoundary;
 import static org.logdoc.fairhttp.service.tools.websocket.protocol.IProtocol.RFC_KEY_UUID;
 import static org.logdoc.fairhttp.service.tools.websocket.protocol.IProtocol.WS_VERSION;
 import static org.logdoc.helpers.Texts.isEmpty;
@@ -182,6 +182,79 @@ public class Http {
             final MultiForm form = new MultiForm();
 
             try {
+                final List<Pair<Integer, Integer>> positions = HttpBinStreaming.markParts(body, getBoundary(contentType));
+
+                for (final Pair<Integer, Integer> partMark : positions) {
+                    final AtomicReference<MimeType> cTypeHold = new AtomicReference<>(MimeType.TEXTPLAIN);
+                    final Map<String, String> partHeaders = new HashMap<>(8) {
+                        @Override
+                        public String put(final String key, final String value) {
+                            return super.put(key.toUpperCase(), value);
+                        }
+
+                        @Override
+                        public String get(final Object key) {
+                            return super.get(String.valueOf(key).toUpperCase());
+                        }
+                    };
+
+                    try (final ByteArrayOutputStream tempo = new ByteArrayOutputStream(256)) {
+                        final AtomicBoolean inHead = new AtomicBoolean(true);
+                        final Consumer<Byte> headersConsumer = HttpBinStreaming.headersTicker(tempo,
+                                len -> {},
+                                chunked -> {},
+                                cTypeHold::set,
+                                partHeaders::put,
+                                (n, v) -> {},
+                                unused -> tempo.reset(),
+                                unused -> {
+                                    tempo.reset();
+                                    inHead.set(false);
+                                }
+                        );
+                        final Consumer<Byte> bodyConsumer = tempo::write;
+
+                        for (int i = partMark.first; i < partMark.second; i++) {
+                            if (inHead.get())
+                                headersConsumer.accept(body[i]);
+                            else
+                                bodyConsumer.accept(body[i]);
+                        }
+
+                        final String cd;
+                        if ((cd = partHeaders.get(Headers.ContentDisposition)) != null) {
+                            String fileName = null, fieldName = null;
+
+                            final String cdl = cd.trim().toLowerCase();
+                            if (cdl.startsWith(Headers.FormData) || cdl.startsWith(Headers.Attachment)) {
+                                try {
+//                                    final MimeType mimed = new MimeType(cd);
+                                    final ParameterParser parser = new ParameterParser();
+                                    parser.setLowerCaseNames();
+
+                                    final Map<String, String> parameters = parser.parse(cd, ';');
+
+                                    fileName = parameters.get("filename");
+                                    fieldName = parameters.get("name");
+                                } catch (final Exception ignore) {}
+                            }
+
+                            if (isEmpty(fieldName))
+                                continue;
+
+                            if (!isEmpty(fileName))
+                                form.fileData(fieldName, fileName, tempo.toByteArray(), cTypeHold.get());
+                            else if (cTypeHold.get().getBaseType().startsWith("text/"))
+                                form.textData(fieldName, tempo.toString(StandardCharsets.UTF_8));
+                            else
+                                form.binData(fieldName, tempo.toByteArray(), partHeaders);
+                        }
+                    } catch (final Exception e) {
+                        logger.error("Cant process multi-part form part: " + e.getMessage(), e);
+                    }
+                }
+
+/*
                 MultiHelper.process(new MultiHelper.MultiHandler() {
                     @Override
                     public void part(final String fieldName, final byte[] data, final Map<String, List<String>> headers) {
@@ -198,6 +271,7 @@ public class Http {
                         form.fileData(fieldName, data, contentType);
                     }
                 }, contentType, body);
+*/
             } catch (final Exception e) {
                 logger.error(e.getMessage(), e);
             }
@@ -338,10 +412,8 @@ public class Http {
     }
 
     public static class Response {
-        private static final Logger logger = LoggerFactory.getLogger(Response.class);
         public static final Http.Response jsonSuccess = ok(Json.newObject().put("success", true));
-
-
+        private static final Logger logger = LoggerFactory.getLogger(Response.class);
         private final Map<String, String> headers;
         private final Set<Cookie> cookies;
         private int code;
