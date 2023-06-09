@@ -178,6 +178,7 @@ public class Http {
             if (contentTypeMismatch(MimeType.MULTIPART))
                 return null;
 
+            sureBodyRead();
             final MultiForm form = new MultiForm();
 
             try {
