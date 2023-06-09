@@ -253,25 +253,6 @@ public class Http {
                         logger.error("Cant process multi-part form part: " + e.getMessage(), e);
                     }
                 }
-
-/*
-                MultiHelper.process(new MultiHelper.MultiHandler() {
-                    @Override
-                    public void part(final String fieldName, final byte[] data, final Map<String, List<String>> headers) {
-                        form.binData(fieldName, data, headers);
-                    }
-
-                    @Override
-                    public void part(final String fieldName, final String data) {
-                        form.textData(fieldName, data);
-                    }
-
-                    @Override
-                    public void part(final String fieldName, final String fileName, final byte[] data, final String contentType) {
-                        form.fileData(fieldName, data, contentType);
-                    }
-                }, contentType, body);
-*/
             } catch (final Exception e) {
                 logger.error(e.getMessage(), e);
             }
@@ -502,13 +483,11 @@ public class Http {
                 if (!isEmpty(e.getValue()) && !isEmpty(e.getKey())) {
                     os.write((e.getKey() + ": " + e.getValue()).getBytes(StandardCharsets.UTF_8));
                     os.write(FEED);
-                    logger.debug("Response header '" + e.getKey() + "' :: '" + e.getValue() + "'");
                 }
 
             for (final Cookie c : cookies) {
                 os.write((Headers.ResponseCookies + ": " + c).getBytes(StandardCharsets.UTF_8));
                 os.write(FEED);
-                logger.debug("Response cookie '" + c + "'");
             }
 
             os.write(FEED);
@@ -518,7 +497,6 @@ public class Http {
             else if (promise != null)
                 promise.accept(os);
 
-            logger.debug("Response written");
             os.flush();
         }
 
@@ -806,8 +784,6 @@ public class Http {
 
             if (extension == null)
                 extension = new DefaultExtension();
-
-            logger.info("Websocket prepared :: " + id);
         }
 
         public final void close(final int code, final String reason) {

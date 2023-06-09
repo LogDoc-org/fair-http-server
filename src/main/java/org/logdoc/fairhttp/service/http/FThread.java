@@ -28,7 +28,6 @@ class FThread extends Thread {
         setDaemon(true);
 
         server.threadStarted();
-        logger.debug("New FThread started");
         accept(socket);
     }
 
@@ -75,7 +74,6 @@ class FThread extends Thread {
                         if (s.state() == SocketDriver.STATE.REQUEST_READY)
                             server.handleRequest(s);
                     } catch (final IOException e) {
-                        logger.debug("Closing socket: " + s + " :: " + e.getMessage());
                         try {
                             opened.remove(i--).close();
                         } catch (final Exception ignore) {
@@ -95,7 +93,7 @@ class FThread extends Thread {
                     sleep(30);
                 } catch (final InterruptedException e) {
                     if (isInterrupted())
-                        break MAIN;
+                        break;
                 }
         }
 
@@ -104,6 +102,5 @@ class FThread extends Thread {
         } catch (final Exception ignore) {
         }
         server.threadStopped(this);
-        logger.debug("FThread stopped");
     }
 }

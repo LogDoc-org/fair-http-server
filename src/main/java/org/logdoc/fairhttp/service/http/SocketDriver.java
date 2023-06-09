@@ -1,7 +1,5 @@
 package org.logdoc.fairhttp.service.http;
 
-import org.logdoc.fairhttp.service.api.helpers.Headers;
-import org.logdoc.fairhttp.service.api.helpers.MimeType;
 import org.logdoc.fairhttp.service.tools.HttpBinStreaming;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -14,12 +12,8 @@ import java.net.Socket;
 import java.net.SocketTimeoutException;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
-import java.util.Arrays;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
-
-import static org.logdoc.helpers.Digits.getInt;
-import static org.logdoc.helpers.Texts.notNull;
 
 /**
  * @author Denis Danilin | me@loslobos.ru
@@ -67,6 +61,8 @@ public class SocketDriver {
                     handleByte((byte) b); // fill
             }
         } catch (final SocketTimeoutException ignore) {
+            logger.error("Failed read socket :: timeout");
+            state.set(STATE.SOCKETERROR);
         }
     }
 
@@ -81,7 +77,6 @@ public class SocketDriver {
         return b -> {
             if (Character.isSpaceChar(b)) {
                 request.method = tmp.toString(StandardCharsets.US_ASCII);
-                logger.debug("Request method: " + request.method);
                 tmp.reset();
                 consumer = pathConsume();
                 return;
@@ -95,7 +90,6 @@ public class SocketDriver {
         return b -> {
             if (Character.isSpaceChar(b)) {
                 request.path = URLDecoder.decode(tmp.toString(StandardCharsets.US_ASCII), StandardCharsets.UTF_8).replaceAll("/{2,}", "/");
-                logger.debug("Request path: " + request.path);
                 tmp.reset();
                 consumer = protoConsume();
                 return;
@@ -109,7 +103,6 @@ public class SocketDriver {
         return b -> {
             if (b == '\n') {
                 request.proto = tmp.toString(StandardCharsets.US_ASCII).trim();
-                logger.debug("Request proto: " + request.proto);
                 tmp.reset();
                 consumer = headersConsume();
                 return;

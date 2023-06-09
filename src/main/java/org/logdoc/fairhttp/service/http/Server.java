@@ -92,7 +92,7 @@ public class Server {
             } else
                 logger.debug("No statics: dir is empty `"+dir+"`");
         } catch (final IllegalStateException ise) {
-            logger.debug("Cant setup static assets: " + ise.getMessage() + ", noop.");
+            logger.error("Cant setup static assets: " + ise.getMessage() + ", noop.");
             assets0 = new NoStatics();
         }
 
@@ -148,7 +148,6 @@ public class Server {
 
         for (final Endpoint e : endpoints)
             if (e.match(request.method, hardPath)) {
-                logger.info(request.toString());
                 final Function<Throwable, Void> errorHandler = t -> {
                     logger.error(t.getMessage(), t);
                     final Http.Response response = Http.Response.ServerError();

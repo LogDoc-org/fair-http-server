@@ -46,9 +46,28 @@ public class DirectRead extends StaticRead {
         logger.info("Static content root dir: " + this.root);
     }
 
+    public static Http.Response fileResponse(final Path p, final String mimeType, final long size) {
+        final Http.Response response = Http.Response.Ok();
+        response.header(Headers.ContentType, mimeType);
+        response.header(Headers.ContentLength, size);
+        response.setPromise(os -> {
+            final byte[] buf = new byte[1024 * 640];
+            int read;
+
+            try (final InputStream is = Files.newInputStream(p)) {
+                while ((read = is.read(buf)) != -1)
+                    os.write(buf, 0, read);
+                os.flush();
+            } catch (final Exception e) {
+                logger.error(p + " :: " + e.getMessage(), e);
+            }
+        });
+
+        return response;
+    }
+
     @Override
     public Http.Response apply(String webpath) {
-        logger.info("Raw request path  `"+webpath+"`");
         webpath = webpath.replaceAll("/{2,}", "/");
         if (webpath.startsWith("/"))
             webpath = webpath.substring(1);
@@ -56,10 +75,8 @@ public class DirectRead extends StaticRead {
 
         final Path p = root.resolve(webpath);
 
-        if (!Files.exists(p)) {
-            logger.debug("Not found `"+webpath+"`, trying to map 404...");
+        if (!Files.exists(p))
             return map404(webpath);
-        }
 
         Http.Response response = pickCached(webpath);
 
@@ -148,25 +165,5 @@ public class DirectRead extends StaticRead {
         } finally {
             cacheMe(webpath, response);
         }
-    }
-
-    public static Http.Response fileResponse(final Path p, final String mimeType, final long size) {
-        final Http.Response response = Http.Response.Ok();
-        response.header(Headers.ContentType, mimeType);
-        response.header(Headers.ContentLength, size);
-        response.setPromise(os -> {
-            final byte[] buf = new byte[1024 * 640];
-            int read;
-
-            try (final InputStream is = Files.newInputStream(p)) {
-                while ((read = is.read(buf)) != -1)
-                    os.write(buf, 0, read);
-                os.flush();
-            } catch (final Exception e) {
-                logger.error(p + " :: " + e.getMessage(), e);
-            }
-        });
-
-        return response;
     }
 }
