@@ -105,7 +105,7 @@ public class HttpBinStreaming {
                                             final String[] parts = c.split(Pattern.quote("="), 2);
                                             if (parts.length != 2) return;
 
-                                            cookieConsumer.accept(notNull(parts[0]), notNull(parts[1]));
+                                            cookieConsumer.accept(notNull(parts[0]), stringQuotes(parts[1]));
                                         });
                         }
 
@@ -121,5 +121,17 @@ public class HttpBinStreaming {
             } else
                 tmp.write(b);
         };
+    }
+
+    private static String stringQuotes(String value) {
+        if (value == null)
+            return null;
+
+        value = notNull(value);
+
+        if (!value.startsWith("\""))
+            return value;
+
+        return value.substring(1, value.length() - 1);
     }
 }

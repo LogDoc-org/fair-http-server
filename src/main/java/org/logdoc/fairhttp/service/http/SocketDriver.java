@@ -54,16 +54,13 @@ public class SocketDriver {
 
     void read(final int max) throws IOException {
         try {
-            for (int i = 0, b = 0; i < max && b != -1; i++) {
+            for (int i = 0, b = 0; i < max && b != -1 && state.get() == STATE.ACCEPTING; i++) {
                 b = is.read();
 
                 if (b != -1)
                     handleByte((byte) b); // fill
             }
-        } catch (final SocketTimeoutException ignore) {
-            logger.error("Failed read socket :: timeout");
-            state.set(STATE.SOCKETERROR);
-        }
+        } catch (final SocketTimeoutException ignore) {}
     }
 
     private void handleByte(final byte b) {
@@ -157,6 +154,7 @@ public class SocketDriver {
     void response(final Http.Response response) {
         try {
             request.skipBody();
+            state(STATE.ACCEPTING);
 
             if (response instanceof Http.WebSocket) {
                 ((Http.WebSocket) response).prepare(request, os, unused -> state(STATE.SOCKETERROR));
@@ -166,7 +164,6 @@ public class SocketDriver {
             response.writeTo(os);
 
             consumer = methodConsume();
-            state(STATE.ACCEPTING);
         } catch (final Throwable e) {
             state(STATE.SOCKETERROR);
             logger.error(e.getMessage(), e);

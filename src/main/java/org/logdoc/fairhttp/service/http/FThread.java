@@ -36,8 +36,6 @@ class FThread extends Thread {
             return false;
 
         try {
-            socket.setSoTimeout(30);
-
             synchronized (opened) {
                 return opened.add(new SocketDriver(socket));
             }
