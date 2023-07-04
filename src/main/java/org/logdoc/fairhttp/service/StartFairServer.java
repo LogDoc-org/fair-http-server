@@ -2,8 +2,11 @@ package org.logdoc.fairhttp.service;
 
 import com.typesafe.config.Config;
 import com.typesafe.config.ConfigFactory;
+import org.logdoc.fairhttp.service.api.helpers.MimeType;
 import org.logdoc.fairhttp.service.api.helpers.Preloaded;
+import org.logdoc.fairhttp.service.http.Http;
 import org.logdoc.fairhttp.service.http.Server;
+import org.logdoc.fairhttp.service.tools.ErrorHandler;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -21,7 +24,7 @@ import java.util.stream.Collectors;
  * FairHttpService ☭ sweat and blood
  */
 public class StartFairServer {
-    private static final Logger logger = LoggerFactory.getLogger("FairServer Starter");
+    private static final Logger logger = LoggerFactory.getLogger(StartFairServer.class);
 
     public static void main(final String[] args) {
         new StartFairServer().start();
@@ -51,6 +54,26 @@ public class StartFairServer {
         final Server s = new Server(c);
         DI.bindProvider(Server.class, () -> s);
         s.setupConfigEndpoints(endpoints);
+
+        final Logger errorLogger = LoggerFactory.getLogger(ErrorHandler.class);
+
+        s.setupErrorHandler(t -> {
+            errorLogger.error(t.getMessage(), t);
+            final Http.Response response = Http.Response.ServerError();
+            if (t.getMessage() != null)
+                response.setPayload(t.getMessage().getBytes(StandardCharsets.UTF_8), MimeType.TEXTPLAIN);
+
+            return response;
+        });
+
+        if (c.hasPath("fair.error_handler"))
+            try {
+                final ErrorHandler handler = (ErrorHandler) Class.forName(c.getString("fair.error_handler")).getDeclaredConstructor().newInstance();
+                s.setupErrorHandler(handler::handle);
+            } catch (final Exception e) {
+                logger.warn("Cant setup custom error handler: " + e.getMessage());
+            }
+
         s.start();
 
         if (c.hasPath("fair.preload.load"))

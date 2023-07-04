@@ -2,7 +2,6 @@ package org.logdoc.fairhttp.service.http;
 
 import com.typesafe.config.Config;
 import org.logdoc.fairhttp.service.api.helpers.DynamicRoute;
-import org.logdoc.fairhttp.service.api.helpers.MimeType;
 import org.logdoc.fairhttp.service.api.helpers.endpoint.Endpoint;
 import org.logdoc.fairhttp.service.http.statics.BundledRead;
 import org.logdoc.fairhttp.service.http.statics.DirectRead;
@@ -15,7 +14,6 @@ import org.slf4j.LoggerFactory;
 import java.net.Inet4Address;
 import java.net.ServerSocket;
 import java.net.Socket;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -45,6 +43,8 @@ public class Server {
     private final int port;
     private final Function<String, Http.Response> assets;
     private final CORS cors;
+
+    private Function<Throwable, Http.Response> errorHandler;
 
     public Server(final int port) { // minimal
         this.port = port;
@@ -149,12 +149,8 @@ public class Server {
         for (final Endpoint e : endpoints)
             if (e.match(request.method, hardPath)) {
                 final Function<Throwable, Void> errorHandler = t -> {
-                    logger.error(t.getMessage(), t);
-                    final Http.Response response = Http.Response.ServerError();
-                    if (t.getMessage() != null)
-                        response.setPayload(t.getMessage().getBytes(StandardCharsets.UTF_8), MimeType.TEXTPLAIN);
+                    driver.response(Server.this.errorHandler.apply(t));
 
-                    driver.response(response);
                     return null;
                 };
 
@@ -237,5 +233,10 @@ public class Server {
 
     public synchronized boolean addEndpoint(final String method, final String endpoint, final BiFunction<Http.Request, Map<String, String>, CompletionStage<Http.Response>> callback) {
         return endpoints.add(new Endpoint(method, endpoint, callback));
+    }
+
+    public void setupErrorHandler(final Function<Throwable, Http.Response> errorHandler) {
+        if (errorHandler != null)
+            this.errorHandler = errorHandler;
     }
 }

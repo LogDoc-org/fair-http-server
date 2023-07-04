@@ -80,11 +80,6 @@ public final class DI {
         if (type == null)
             throw new NullPointerException("Type is null");
 
-        if (bindMap.containsKey(type)) {
-            logger.warn("Type '" + type.getName() + "' already bound to '" + bindMap.get(type).getName() + "' and cant be re-bound to '" + implementation.getName() + "'");
-            return;
-        }
-
         if (implementation == null)
             throw new NullPointerException("Implementation is null");
 

@@ -15,6 +15,7 @@ import java.util.List;
  */
 public class ConfigTools {
 
+    @SuppressWarnings("unchecked")
     public static List<String> sureStrings(final Config c, final String name) {
         final List<String> list = new ArrayList<>(0);
 
