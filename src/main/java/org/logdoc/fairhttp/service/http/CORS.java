@@ -73,8 +73,7 @@ class CORS {
         if (multiOrigins)
             response.header("Vary", "origin"); // multiple origins must be noted
 
-        if (request.method.equals("OPTIONS") // preflight
-                || (!request.hasHeader(Headers.Auth) && !request.hasHeader(Headers.RequestCookies))
+        if ((!request.hasHeader(Headers.Auth) && !request.hasHeader(Headers.RequestCookies))
                 || noWilds // no wildcards
         ) { // particular values or wilds allowed
             return response
