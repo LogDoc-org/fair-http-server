@@ -60,7 +60,7 @@ class SocketDriver {
         try {socket.close();} catch (final Exception ignore) {}
     }
 
-    public Http.Request head() {
+    Http.Request head() {
         byte[] head = new byte[8192];
         final Http.Request request = new Http.Request(this);
         final byte[] end = new byte[]{'\r', '\n'};
@@ -238,7 +238,7 @@ class SocketDriver {
         return (byte) is.read();
     }
 
-    public boolean isClosed() {
+    boolean isClosed() {
         return socket.isClosed();
     }
 }
