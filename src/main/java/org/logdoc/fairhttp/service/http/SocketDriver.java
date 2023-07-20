@@ -61,14 +61,14 @@ class SocketDriver {
     }
 
     public Http.Request head() {
-//        soTimeout(30000);
         byte[] head = new byte[8192];
         final Http.Request request = new Http.Request(this);
         final byte[] end = new byte[]{'\r', '\n'};
-        int i = 0;
 
         try {
-            for (; i <= head.length; i++) {
+            soTimeout(1500);
+
+            for (int i = 0; i <= head.length; i++) {
                 head[i] = (byte) is.read();
 
                 if (i > 4 && end[0] == head[i - 3] && end[1] == head[i - 2] && end[0] == head[i - 1] && end[1] == head[i]) {
@@ -79,7 +79,7 @@ class SocketDriver {
         } catch (final ArrayIndexOutOfBoundsException e) {
             throw new IllegalStateException(id + " :: Headers section is out of the limit 8192 bytes");
         } catch (final Exception e) {
-            logger.error(id + " :: ["+i+"] " + e.getMessage(), e);
+            logger.error(id + " :: " + e.getMessage(), e);
             throw new RuntimeException(e);
         }
 
@@ -93,7 +93,7 @@ class SocketDriver {
         request.path = notNull(firstLine[1]);
         request.proto = notNull(firstLine[2]);
 
-        for (i = 1; i < heads.length; i++) {
+        for (int i = 1; i < heads.length; i++) {
             final int idx;
             if ((idx = heads[i].indexOf(':')) != -1) {
                 String name = heads[i].substring(0, idx).trim();
