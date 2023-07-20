@@ -17,10 +17,12 @@ import java.net.Socket;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.util.*;
+import java.util.Collection;
+import java.util.Map;
+import java.util.SortedSet;
+import java.util.TreeSet;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.BiFunction;
 import java.util.function.Function;
 
@@ -38,22 +40,17 @@ public class Server {
     private static Server backRef = null;
 
     private final SortedSet<Endpoint> endpoints;
-    private final AtomicInteger densityFactor, threadCount;
-    private final List<FThread> running;
-    private final int port;
+    private final int port, maxRequestBytes;
     private final Function<String, Http.Response> assets;
     private final CORS cors;
 
     private Function<Throwable, Http.Response> errorHandler;
 
-    public Server(final int port) { // minimal
+    public Server(final int port, final int maxRequestBytes) { // minimal
         this.port = port;
+        this.maxRequestBytes = maxRequestBytes;
         this.endpoints = new TreeSet<>();
 
-        densityFactor = new AtomicInteger(2);
-        threadCount = new AtomicInteger(0);
-
-        running = new ArrayList<>(16);
         assets = new NoStatics();
         cors = new CORS(null);
     }
@@ -67,13 +64,9 @@ public class Server {
         }
 
         port = config.getInt(ConfigPath.PORT);
+        maxRequestBytes = config.getBytes(ConfigPath.MAX_REQUEST).intValue();
 
         this.endpoints = new TreeSet<>();
-
-        densityFactor = new AtomicInteger(2);
-        threadCount = new AtomicInteger(0);
-
-        running = new ArrayList<>(16);
 
         final Config staticsCfg = ConfigTools.sureConf(config, "fair.http.statics");
         final String dir = staticsCfg != null && staticsCfg.hasPath("root") && !staticsCfg.getIsNull("root") ? notNull(staticsCfg.getString("root")) : null;
@@ -105,19 +98,11 @@ public class Server {
         new Thread(() -> {
             try (final ServerSocket socket = new ServerSocket(port)) {
                 Socket child;
-                LOOP:
                 do {
                     child = socket.accept();
 
-                    for (final FThread f : running)
-                        if (f.accept(child))
-                            continue LOOP;
-
-                    densityFactor.incrementAndGet();
-                    final FThread f = new FThread(child, this);
-                    f.start();
-
-                    running.add(f);
+                    if (child != null)
+                        new Handler(child, this, maxRequestBytes).start();
                 } while (child != null);
             } catch (final Exception e) {
                 e.printStackTrace();
@@ -139,62 +124,37 @@ public class Server {
         }
     }
 
-    void handleRequest(final SocketDriver driver) {
-        final Http.Request request = driver.request();
-
-        final String hardPath = request.path();
+    void handleRequest(final Handler handler) {
+        final String hardPath = handler.request.path();
 
         boolean hasMatchPath = false;
 
         for (final Endpoint e : endpoints)
-            if (e.match(request.method, hardPath)) {
+            if (e.match(handler.request.method, hardPath)) {
                 final Function<Throwable, Void> errorHandler = t -> {
-                    driver.response(Server.this.errorHandler.apply(t));
+                    handler.response(Server.this.errorHandler.apply(t));
 
                     return null;
                 };
 
-                CompletableFuture.runAsync(() -> e.call(request)
-                        .thenApply(rsp -> cors.wrap(request, rsp))
-                        .thenAccept(driver::response)
+                CompletableFuture.runAsync(() -> e.call(handler.request)
+                        .thenApply(rsp -> cors.wrap(handler.request, rsp))
+                        .thenAccept(handler::response)
                         .exceptionally(errorHandler));
 
                 return;
             } else if (!hasMatchPath && e.pathMatch(hardPath))
                 hasMatchPath = true;
 
-        if (hasMatchPath && request.method.equals("OPTIONS")) {
-            driver.response(cors.wrap(request, Http.Response.NoContent()));
+        if (hasMatchPath && handler.request.method.equals("OPTIONS")) {
+            handler.response(cors.wrap(handler.request, Http.Response.NoContent()));
             return;
         }
 
-        if (request.method.equals("GET"))
-            CompletableFuture.runAsync(() -> driver.response(assets.apply(request.path())));
+        if (handler.request.method.equals("GET"))
+            CompletableFuture.runAsync(() -> handler.response(assets.apply(handler.request.path())));
         else
-            driver.response(Http.Response.NotFound());
-    }
-
-    boolean mayClose() {
-        return threadCount.get() > 2;
-    }
-
-    void threadStopped(final FThread f) {
-        threadCount.decrementAndGet();
-
-        synchronized (running) {
-            running.remove(f);
-        }
-
-        if (densityFactor.get() > 2)
-            densityFactor.decrementAndGet();
-    }
-
-    void threadStarted() {
-        threadCount.incrementAndGet();
-    }
-
-    int capacityLimit() {
-        return (int) Math.pow(2, densityFactor.get());
+            handler.response(Http.Response.NotFound());
     }
 
     public synchronized void setupDynamicEndpoints(final Collection<DynamicRoute> routes) {

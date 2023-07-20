@@ -7,6 +7,7 @@ package org.logdoc.fairhttp.service.tools;
  */
 public interface ConfigPath {
     String PORT = "fair.http.port";
+    String MAX_REQUEST = "fair.http.max_request_body";
     String CORS = "fair.http.cors";
     String CORS_ORIGINS = "origins";
     String CORS_METHODS = "methods";

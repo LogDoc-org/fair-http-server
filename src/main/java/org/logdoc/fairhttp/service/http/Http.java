@@ -77,16 +77,14 @@ public class Http {
 
         final Map<String, String> headers, cookies;
         private final Map<String, String> query;
-        byte[] preRead;
-        InputStream is;
-        int knownBodyLength;
-        boolean chunked;
         MimeType contentType;
         String method, path, proto, ip;
+        byte[] body;
         private String hardPath;
-        private byte[] body;
+        private final SocketDriver driver;
 
-        {
+        Request(final SocketDriver driver) {
+            this.driver = driver;
             headers = new HashMap<>(16) {
                 @Override
                 public String put(final String key, final String value) {
@@ -100,7 +98,6 @@ public class Http {
             };
             cookies = new HashMap<>(8);
             query = new HashMap<>(8);
-            knownBodyLength = -1;
         }
 
         @Override
@@ -293,82 +290,7 @@ public class Http {
             if (body != null)
                 return;
 
-            try (final ByteArrayOutputStream os = new ByteArrayOutputStream(knownBodyLength > 0 ? knownBodyLength : 512 * 1024)) {
-                sureBodyRead(os, preRead != null ? preRead.length : 0);
-
-                body = os.toByteArray();
-            } catch (final Exception e) {
-                logger.error(e.getMessage(), e);
-                body = new byte[0];
-            }
-        }
-
-        private void sureBodyRead(final OutputStream os, final int size) throws Exception {
-            if (body != null)
-                return;
-
-            if (preRead != null)
-                os.write(preRead);
-            preRead = null;
-
-            if (knownBodyLength > 0 && size < knownBodyLength)
-                readLengthIsTo(os, knownBodyLength - size);
-            else if (chunked) {
-                int chunkSize;
-
-                do {
-                    chunkSize = getChunkSize();
-
-                    if (chunkSize > 0)
-                        for (int i = 0; i < chunkSize; i++) os.write(is.read());
-                } while (chunkSize > 0);
-            } else
-                readRestIsTo(os);
-        }
-
-        private int getChunkSize() throws IOException {
-            int b;
-
-            try (final ByteArrayOutputStream os = new ByteArrayOutputStream(8)) {
-                do {
-                    b = is.read();
-
-                    if (Character.digit(b, 16) != -1)
-                        os.write(b);
-                } while (b != '\n');
-
-                return Integer.parseInt(os.toString(StandardCharsets.US_ASCII), 16);
-            }
-        }
-
-        private void readLengthIsTo(final OutputStream os, final int length) throws Exception {
-            for (int i = 0; i < length; i++) os.write(is.read());
-        }
-
-        private void readRestIsTo(final OutputStream os) {
-            final byte[] buf = new byte[16 * 1024];
-            int read;
-
-            try {
-                do {
-                    read = is.read(buf);
-                    if (read > 0)
-                        os.write(buf, 0, read);
-                } while (read > 0);
-            } catch (final Exception ignore) {
-            } finally {
-                try {
-                    os.flush();
-                } catch (final Exception ignore) {
-                }
-            }
-        }
-
-        public void skipBody() {
-            try {
-                sureBodyRead(OutputStream.nullOutputStream(), preRead == null ? 0 : preRead.length);
-            } catch (final Exception ignore) {
-            }
+            body = driver.body();
         }
 
         public String remoteAddress() {
@@ -443,6 +365,14 @@ public class Http {
             return new Response(500, "Internal error");
         }
 
+        public static Response ServerError(final String reason) {
+            return new Response(500, reason);
+        }
+
+        public static Response ClientError(final String reason) {
+            return new Response(400, reason);
+        }
+
         public void setPromise(final Consumer<OutputStream> promise) {
             if (promise == null)
                 return;
@@ -472,32 +402,36 @@ public class Http {
             headers.put(name.trim(), notNull(value));
         }
 
-        void writeTo(final OutputStream os) throws IOException {
-            os.write(PROTO);
-            os.write((" " + code + (isEmpty(message) ? "" : " " + message)).getBytes(StandardCharsets.US_ASCII));
-            os.write(FEED);
+        byte[] asBytes() throws IOException {
+            try (final ByteArrayOutputStream os = new ByteArrayOutputStream(64 * 1024)) {
+                os.write(PROTO);
+                os.write((" " + code + (isEmpty(message) ? "" : " " + message)).getBytes(StandardCharsets.US_ASCII));
+                os.write(FEED);
 
-            header("Date", LocalDateTime.now().atOffset(ZoneOffset.UTC).format(DateTimeFormatter.RFC_1123_DATE_TIME));
+                header("Date", LocalDateTime.now().atOffset(ZoneOffset.UTC).format(DateTimeFormatter.RFC_1123_DATE_TIME));
 
-            for (final Map.Entry<String, String> e : headers.entrySet())
-                if (!isEmpty(e.getValue()) && !isEmpty(e.getKey())) {
-                    os.write((e.getKey() + ": " + e.getValue()).getBytes(StandardCharsets.UTF_8));
+                for (final Map.Entry<String, String> e : headers.entrySet())
+                    if (!isEmpty(e.getValue()) && !isEmpty(e.getKey())) {
+                        os.write((e.getKey() + ": " + e.getValue()).getBytes(StandardCharsets.UTF_8));
+                        os.write(FEED);
+                    }
+
+                for (final Cookie c : cookies) {
+                    os.write((Headers.ResponseCookies + ": " + c).getBytes(StandardCharsets.UTF_8));
                     os.write(FEED);
                 }
 
-            for (final Cookie c : cookies) {
-                os.write((Headers.ResponseCookies + ": " + c).getBytes(StandardCharsets.UTF_8));
                 os.write(FEED);
+
+                if (!isEmpty(payload) && !(this instanceof WebSocket))
+                    os.write(payload);
+                else if (promise != null)
+                    promise.accept(os);
+
+                os.flush();
+
+                return os.toByteArray();
             }
-
-            os.write(FEED);
-
-            if (!isEmpty(payload) && !(this instanceof WebSocket))
-                os.write(payload);
-            else if (promise != null)
-                promise.accept(os);
-
-            os.flush();
         }
 
         @Override
@@ -531,7 +465,6 @@ public class Http {
 
         private IExtension extension;
         private IProtocol protocol;
-        private OutputStream os;
         private ObjectMapper om;
         private DocumentBuilder xb;
         private Transformer tr;
@@ -542,7 +475,8 @@ public class Http {
         private boolean mask;
         private Drive drive;
         private byte[] payload, maskkey;
-        private Consumer<Void> closeListener;
+
+        private Consumer<byte[]> writeConsumer;
 
         public WebSocket() {
             super(101, "Websocket Connection Upgrade");
@@ -562,11 +496,9 @@ public class Http {
         }
 
         @Override
-        public final void accept(final Byte b0) {
-            if (b0 == null || b0 == -1)
+        public final void accept(final Byte b) {
+            if (b == null || b == -1)
                 return;
-
-            final byte b = b0;
 
             switch (frameStage++) {
                 case -1:
@@ -673,9 +605,9 @@ public class Http {
                 }
 
                 close(code, reason, true);
-            } else if (curop == Opcode.PING) {
+            } else if (curop == Opcode.PING)
                 onPing();
-            } else if (curop == Opcode.PONG)
+            else if (curop == Opcode.PONG)
                 onPong();
             else if (!frame.isFin() || curop == Opcode.CONTINUOUS)
                 processFrameContinuousAndNonFin(frame, curop);
@@ -763,7 +695,7 @@ public class Http {
             }
         }
 
-        void prepare(final Request request, final OutputStream os, final Consumer<Void> closeListener) throws NoSuchAlgorithmException {
+        void prepare(final Request request) throws NoSuchAlgorithmException {
             if (!WS_VERSION.equals(request.header(Headers.SecWebsocketVersion)))
                 throw new IllegalStateException("Wrong websocket version: " + request.header(Headers.SecWebsocketVersion) + ", expected: " + WS_VERSION);
 
@@ -779,11 +711,12 @@ public class Http {
             else if (protocol != null)
                 throw new IllegalStateException("Cant accept requested protocol(s): " + request.header(Headers.SecWebsocketProtocols));
 
-            this.os = os;
-            this.closeListener = closeListener;
-
             if (extension == null)
                 extension = new DefaultExtension();
+        }
+
+        public final void close() {
+            close(CloseFrame.NORMAL, null, false);
         }
 
         public final void close(final int code, final String reason) {
@@ -791,18 +724,10 @@ public class Http {
         }
 
         private void close(final int code, final String reason, final boolean remote) {
-            try {
-                onClose(code, reason, remote);
-            } catch (final Exception ignore) {
-            }
-            try {
-                os.close();
-            } catch (final Exception ignore) {
-            }
-            try {
-                closeListener.accept(null);
-            } catch (final Exception ignore) {
-            }
+            if (!remote)
+                try {sendFrame(new CloseFrame(code, reason));} catch (final Exception ignore) {}
+
+            try {onClose(code, reason, remote);} catch (final Exception ignore) {}
         }
 
         public abstract void onJson(JsonNode json);
@@ -818,15 +743,6 @@ public class Http {
         public abstract void onPong();
 
         public abstract void onClose(int code, String reason, boolean remote);
-
-        public void close() {
-            try {
-                sendFrame(new CloseFrame());
-            } catch (final Exception ignore) {
-            }
-
-            close(CloseFrame.NORMAL, null, false);
-        }
 
         public void ping() {
             sendFrame(new PingFrame());
@@ -905,7 +821,7 @@ public class Http {
             if (!framedata.isValid())
                 throw new IllegalStateException("Invalid frame");
 
-            try {
+            try (final ByteArrayOutputStream os = new ByteArrayOutputStream(1024 * 4)) {
                 extension.encodeFrame(framedata);
 
                 final byte[] mes = framedata.getPayloadData();
@@ -933,6 +849,8 @@ public class Http {
 
                 os.write(mes);
                 os.flush();
+
+                writeConsumer.accept(os.toByteArray());
             } catch (final IOException e) {
                 close(CloseFrame.ABNORMAL_CLOSE, e.getMessage(), false);
                 throw new IllegalStateException(e);
@@ -992,6 +910,10 @@ public class Http {
                 default:
                     throw new IllegalArgumentException("Don't know how to handle " + opcode);
             }
+        }
+
+        void setWriteHandler(final Consumer<byte[]> writeConsumer) {
+            this.writeConsumer = writeConsumer;
         }
     }
 

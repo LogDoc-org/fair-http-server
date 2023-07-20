@@ -32,9 +32,13 @@ public class CloseFrame extends ControlFrame {
     private String reason;
 
     public CloseFrame() {
+        this(NORMAL, "");
+    }
+
+    public CloseFrame(final int code, final String reason) {
         super(Opcode.CLOSING);
-        setReason("");
-        setCode(CloseFrame.NORMAL);
+        this.reason = reason;
+        setCode(code);
     }
 
     public void setCode(int code) {

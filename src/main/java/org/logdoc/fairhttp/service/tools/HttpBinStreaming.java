@@ -123,7 +123,7 @@ public class HttpBinStreaming {
         };
     }
 
-    private static String stringQuotes(String value) {
+    public static String stringQuotes(String value) {
         if (value == null)
             return null;
 
