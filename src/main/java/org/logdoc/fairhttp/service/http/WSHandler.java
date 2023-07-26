@@ -1,5 +1,6 @@
 package org.logdoc.fairhttp.service.http;
 
+import org.logdoc.fairhttp.service.tools.websocket.frames.CloseFrame;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -38,6 +39,8 @@ class WSHandler extends Thread {
                 os.flush();
             } catch (IOException e) {
                 logger.error("Cant write to websocket :: " + e.getMessage(), e);
+                try { socket.close(); } catch (final Exception ignore) { }
+                try { ws.close(CloseFrame.ABNORMAL_CLOSE, e.getMessage()); } catch (final Exception ignore) { }
             }
         });
     }

@@ -27,7 +27,6 @@ public class Handler extends Thread {
     private static final Logger logger = LoggerFactory.getLogger(Handler.class);
 
     private final Server server;
-    //    private final SocketDriver driver;
     private final Socket socket;
     private final String id;
     private final int maxRequestSize, readTimeout;
@@ -38,7 +37,6 @@ public class Handler extends Thread {
         this.readTimeout = readTimeout;
         this.maxRequestSize = maxRequestSize;
         id = socket.getRemoteSocketAddress().toString();
-//        this.driver = new SocketDriver(socket, maxRequestSize);
 
         setDaemon(true);
     }
@@ -84,77 +82,7 @@ public class Handler extends Thread {
             return;
         }
 
-//        try {
-        /*    final String[] heads = new String(head, StandardCharsets.UTF_8).split("\n");
-            final String[] firstLine = heads[0].split("\\s", 3);
-
-            if (firstLine.length != 3)
-                throw new IllegalStateException("Wrong request first line: " + heads[0]);
-
-            final Http.Request request = new Http.Request(this);
-            request.method = notNull(firstLine[0]);
-            request.path = notNull(firstLine[1]);
-            request.proto = notNull(firstLine[2]);
-
-            for (i = 1; i < heads.length; i++) {
-                final int idx;
-                if ((idx = heads[i].indexOf(':')) != -1) {
-                    String name = heads[i].substring(0, idx).trim();
-
-                    if (!name.isEmpty()) {
-                        final String value = notNull(heads[i].substring(idx + 1));
-
-                        if (name.equalsIgnoreCase(Headers.ContentLength)) {
-                            contentLength = getInt(value);
-
-                            if (contentLength > maxRequestSize)
-                                throw new IllegalStateException("Max request size is exceeded: " + maxRequestSize);
-                        } else if (name.equalsIgnoreCase(Headers.TransferEncoding)) {
-                            final String v = notNull(value).toLowerCase(Locale.ROOT);
-
-                            chunked = v.contains("chunked");
-                            gzip = v.contains("gzip");
-                            deflate = v.contains("deflate");
-                        } else if (name.equalsIgnoreCase(Headers.ContentType))
-                            try {
-                                request.contentType = (new MimeType(value));
-                            } catch (Exception e) {
-                                logger.warn("Cant parse request content-type out of request header 'Content-Type' :: `" + value + "`", e);
-                            }
-                        else if (name.equalsIgnoreCase(Headers.RequestCookies)) {
-                            name = Headers.RequestCookies;
-
-                            if (!value.isEmpty())
-                                Arrays.stream(value.split(";"))
-                                        .filter(s -> s.contains("="))
-                                        .forEach(c -> {
-                                            final String[] parts = c.split(Pattern.quote("="), 2);
-                                            if (parts.length != 2) return;
-
-                                            request.cookies.put(notNull(parts[0]), stringQuotes(parts[1]));
-                                        });
-                        }
-
-                        request.headers.put(name.toUpperCase(), value);
-                    }
-
-                } else
-                    logger.warn("Wrong headers line: " + heads[i]);
-            }
-
-            return request;*/
         server.handleRequest(new Request(socket.getRemoteSocketAddress(), head, this::readBody), this::response);
-/*
-        } catch (final DriverException e) {
-            logger.error("Call #" + callId.getAndIncrement(), e);
-            try {driver.write(Http.Response.ServerError(notNull(e.getMessage(), "Server internal error")).asBytes());} catch (final Exception ignore) {}
-            close();
-        } catch (final Exception e) {
-            logger.error(e.getMessage(), e);
-            try {driver.write(Http.Response.ServerError(notNull(e.getMessage(), "Server internal error")).asBytes());} catch (final Exception ignore) {}
-            close();
-        }
-*/
     }
 
     private byte[] readBody(final Request request) {
