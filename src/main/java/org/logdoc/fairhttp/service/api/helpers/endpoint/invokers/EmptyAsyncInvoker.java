@@ -1,7 +1,8 @@
 package org.logdoc.fairhttp.service.api.helpers.endpoint.invokers;
 
 import org.logdoc.fairhttp.service.DI;
-import org.logdoc.fairhttp.service.http.Http;
+import org.logdoc.fairhttp.service.http.Request;
+import org.logdoc.fairhttp.service.http.Response;
 
 import java.lang.reflect.Method;
 import java.util.Map;
@@ -22,9 +23,9 @@ public class EmptyAsyncInvoker implements RequestInvoker {
 
     @SuppressWarnings("unchecked")
     @Override
-    public CompletionStage<Http.Response> apply(final Http.Request request, final Map<String, String> map) {
+    public CompletionStage<Response> apply(final Request request, final Map<String, String> map) {
         try {
-            return (CompletionStage<Http.Response>) method.invoke(DI.gain(method.getDeclaringClass()));
+            return (CompletionStage<Response>) method.invoke(DI.gain(method.getDeclaringClass()));
         } catch (final Exception e) {
             return CompletableFuture.failedFuture(e);
         }

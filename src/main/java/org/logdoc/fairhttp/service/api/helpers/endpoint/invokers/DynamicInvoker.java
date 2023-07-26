@@ -3,9 +3,12 @@ package org.logdoc.fairhttp.service.api.helpers.endpoint.invokers;
 import com.fasterxml.jackson.databind.JsonNode;
 import org.logdoc.fairhttp.service.DI;
 import org.logdoc.fairhttp.service.http.Http;
+import org.logdoc.fairhttp.service.http.Request;
+import org.logdoc.fairhttp.service.http.Response;
 import org.logdoc.fairhttp.service.tools.Form;
 import org.logdoc.fairhttp.service.tools.MultiForm;
 
+import java.io.IOException;
 import java.lang.reflect.Method;
 import java.util.List;
 import java.util.Map;
@@ -27,11 +30,16 @@ public class DynamicInvoker implements RequestInvoker {
     }
 
     @Override
-    public CompletionStage<Http.Response> apply(final Http.Request request, final Map<String, String> pathMap) {
-        final Map<String, String> query = request.queryMap(), cookies = request.cookieMap();
-        final Form form = request.bodyAsForm();
-        final MultiForm multiForm = request.bodyAsMultipart();
-        final JsonNode json = request.bodyAsJson();
+    public CompletionStage<Response> apply(final Request request, final Map<String, String> pathMap) {
+        final Map<String, String> query = request.queryMap(), cookies = request.cookies();
+        final Form form = request.body().asForm();
+        final MultiForm multiForm;
+        try {
+            multiForm = request.body().asMultipart();
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+        final JsonNode json = request.body().asJson();
 
         try {
             final Object[] params = new Object[args.size()];
@@ -40,7 +48,7 @@ public class DynamicInvoker implements RequestInvoker {
             for (final ArgumentDefinition ad : args)
                 params[i++] = ad.resolve(query, cookies, form, multiForm, pathMap, json, request);
 
-            return CompletableFuture.completedFuture((Http.Response) targetMethod.invoke(DI.gain(targetMethod.getDeclaringClass()), params));
+            return CompletableFuture.completedFuture((Response) targetMethod.invoke(DI.gain(targetMethod.getDeclaringClass()), params));
         } catch (final Exception e) {
             return CompletableFuture.failedFuture(e);
         }

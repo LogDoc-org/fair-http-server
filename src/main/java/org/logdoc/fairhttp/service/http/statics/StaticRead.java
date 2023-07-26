@@ -3,7 +3,7 @@ package org.logdoc.fairhttp.service.http.statics;
 import com.typesafe.config.Config;
 import com.typesafe.config.ConfigException;
 import org.logdoc.fairhttp.service.api.helpers.MimeType;
-import org.logdoc.fairhttp.service.http.Http;
+import org.logdoc.fairhttp.service.http.Response;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -27,7 +27,7 @@ import static org.logdoc.helpers.Texts.isEmpty;
  * 25.04.2023 12:14
  * fair-http-server ☭ sweat and blood
  */
-abstract class StaticRead implements Function<String, Http.Response> {
+abstract class StaticRead implements Function<String, Response> {
     protected final static Logger logger = LoggerFactory.getLogger(StaticRead.class);
     private static final DateTimeFormatter format = DateTimeFormatter.ofPattern("dd-MM-yyyy HH:mm");
     private final static String autoIdxPrm = "auto_index", indexesPrm = "index_files", map404To = "map404_to", cachePrm = "memory_cache", mimesPrm = "mime_types",
@@ -41,7 +41,7 @@ abstract class StaticRead implements Function<String, Http.Response> {
     protected final String map404Path;
 
     private final ConcurrentMap<String, String> mimes;
-    private final ConcurrentMap<String, Http.Response> cachedMap;
+    private final ConcurrentMap<String, Response> cachedMap;
     private final ConcurrentMap<String, ScheduledFuture<?>> futuresMap;
 
     private final Executor cacheCleanTP;
@@ -134,10 +134,10 @@ abstract class StaticRead implements Function<String, Http.Response> {
         }
     }
 
-    protected Http.Response map404(final String path) {
+    protected Response map404(final String path) {
         if (map404Path == null || path.equals(map404Path)) {
             logger.info("Not found `"+path+"`");
-            return Http.Response.NotFound();
+            return Response.NotFound();
         }
 
         return apply(map404Path);
@@ -161,7 +161,7 @@ abstract class StaticRead implements Function<String, Http.Response> {
         return html.toString().getBytes(StandardCharsets.UTF_8);
     }
 
-    protected void cacheMe(final String id, final Http.Response response) {
+    protected void cacheMe(final String id, final Response response) {
         if (!cache || response == null || response.size() <= 0 || response.size() > maxCacheSize)
             return;
 
@@ -189,7 +189,7 @@ abstract class StaticRead implements Function<String, Http.Response> {
         mimes.put(id, mime);
     }
 
-    protected Http.Response pickCached(final String id) {
+    protected Response pickCached(final String id) {
         return cachedMap.get(id);
     }
 

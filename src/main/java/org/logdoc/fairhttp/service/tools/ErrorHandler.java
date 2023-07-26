@@ -1,6 +1,6 @@
 package org.logdoc.fairhttp.service.tools;
 
-import org.logdoc.fairhttp.service.http.Http;
+import org.logdoc.fairhttp.service.http.Response;
 
 /**
  * @author Denis Danilin | me@loslobos.ru
@@ -8,5 +8,5 @@ import org.logdoc.fairhttp.service.http.Http;
  * fair-http-server ☭ sweat and blood
  */
 public interface ErrorHandler {
-    Http.Response handle(Throwable t);
+    Response handle(Throwable t);
 }

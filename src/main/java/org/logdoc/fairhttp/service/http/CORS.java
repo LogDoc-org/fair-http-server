@@ -69,7 +69,7 @@ class CORS {
             }
     }
 
-    Http.Response wrap(final Http.Request request, Http.Response response) {
+    Response wrap(final Request request, Response response) {
         if (multiOrigins)
             response.header("Vary", "origin"); // multiple origins must be noted
 

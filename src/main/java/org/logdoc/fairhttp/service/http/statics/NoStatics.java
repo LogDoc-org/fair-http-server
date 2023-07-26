@@ -1,6 +1,6 @@
 package org.logdoc.fairhttp.service.http.statics;
 
-import org.logdoc.fairhttp.service.http.Http;
+import org.logdoc.fairhttp.service.http.Response;
 
 import java.util.function.Function;
 
@@ -9,9 +9,9 @@ import java.util.function.Function;
  * 04.03.2023 13:29
  * fair-http-server ☭ sweat and blood
  */
-public class NoStatics implements Function<String, Http.Response> {
+public class NoStatics implements Function<String, Response> {
     @Override
-    public Http.Response apply(final String s) {
-        return Http.Response.NotFound();
+    public Response apply(final String s) {
+        return Response.NotFound();
     }
 }

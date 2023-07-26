@@ -2,6 +2,8 @@ package org.logdoc.fairhttp.service.api.helpers.endpoint.invokers;
 
 import org.logdoc.fairhttp.service.DI;
 import org.logdoc.fairhttp.service.http.Http;
+import org.logdoc.fairhttp.service.http.Request;
+import org.logdoc.fairhttp.service.http.Response;
 import org.logdoc.fairhttp.service.tools.Json;
 
 import java.lang.reflect.Method;
@@ -24,9 +26,9 @@ public class BodyRequestInvoker implements RequestInvoker {
     }
 
     @Override
-    public CompletionStage<Http.Response> apply(final Http.Request request, final Map<String, String> map) {
+    public CompletionStage<Response> apply(final Request request, final Map<String, String> map) {
         try {
-            return CompletableFuture.completedFuture((Http.Response) method.invoke(DI.gain(method.getDeclaringClass()), Json.fromJson(request.bodyAsJson(), targetCls), request));
+            return CompletableFuture.completedFuture((Response) method.invoke(DI.gain(method.getDeclaringClass()), request.body().map(targetCls), request));
         } catch (final Exception e) {
             return CompletableFuture.failedFuture(e);
         }

@@ -2,7 +2,7 @@ package org.logdoc.fairhttp.service.api;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import org.logdoc.fairhttp.service.api.helpers.MimeType;
-import org.logdoc.fairhttp.service.http.Http;
+import org.logdoc.fairhttp.service.http.Response;
 import org.logdoc.fairhttp.service.http.statics.DirectRead;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -20,23 +20,23 @@ import java.nio.file.Path;
 public class Controller {
     private static final Logger logger = LoggerFactory.getLogger(Controller.class);
 
-    public static Http.Response ok() {
-        return Http.Response.Ok();
+    public static Response ok() {
+        return Response.Ok();
     }
 
-    public static Http.Response ok(final JsonNode json) {
-        final Http.Response response = Http.Response.Ok();
+    public static Response ok(final JsonNode json) {
+        final Response response = Response.Ok();
 
         response.setPayload(json.toString().getBytes(StandardCharsets.UTF_8), MimeType.JSON);
 
         return response;
     }
 
-    public static Http.Response ok(final Path p) {
+    public static Response ok(final Path p) {
         try {
             if (!Files.exists(p)) {
                 logger.error("Path not found: " + p);
-                return Http.Response.NotFound();
+                return Response.NotFound();
             }
 
             final int[] head = new int[16];
@@ -50,27 +50,27 @@ public class Controller {
         } catch (final Exception e) {
             logger.error(e.getMessage(), e);
 
-            return Http.Response.ServerError();
+            return Response.ServerError();
         }
     }
 
-    public static Http.Response ok(final String data) {
-        final Http.Response response = Http.Response.Ok();
+    public static Response ok(final String data) {
+        final Response response = Response.Ok();
 
         response.setPayload(data.getBytes(StandardCharsets.UTF_8), MimeType.TEXTPLAIN);
 
         return response;
     }
 
-    public static Http.Response ok(final byte[] bytes) {
-        final Http.Response response = Http.Response.Ok();
+    public static Response ok(final byte[] bytes) {
+        final Response response = Response.Ok();
 
         response.setPayload(bytes, MimeType.BINARY);
 
         return response;
     }
 
-    public static Http.Response status(final int code, final String message) {
-        return new Http.Response(code, message);
+    public static Response status(final int code, final String message) {
+        return new Response(code, message);
     }
 }

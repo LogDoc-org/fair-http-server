@@ -4,7 +4,7 @@ import com.typesafe.config.Config;
 import org.logdoc.fairhttp.service.api.helpers.EagerSingleton;
 import org.logdoc.fairhttp.service.api.helpers.Preloaded;
 import org.logdoc.fairhttp.service.api.helpers.Singleton;
-import org.logdoc.fairhttp.service.http.Http;
+import org.logdoc.fairhttp.service.http.Request;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -170,7 +170,7 @@ public final class DI {
                     argz = new ArrayList<>(args.length);
 
                     for (final Class<?> arg : args) {
-                        if (arg == null || arg.isPrimitive() || arg.isArray() || ancestors.contains(arg) || Map.class.isAssignableFrom(arg) || Collection.class.isAssignableFrom(arg) || arg.equals(clas) || Http.Request.class.isAssignableFrom(arg))
+                        if (arg == null || arg.isPrimitive() || arg.isArray() || ancestors.contains(arg) || Map.class.isAssignableFrom(arg) || Collection.class.isAssignableFrom(arg) || arg.equals(clas) || Request.class.isAssignableFrom(arg))
                             continue CYCLE;
 
                         if (arg.equals(Config.class))

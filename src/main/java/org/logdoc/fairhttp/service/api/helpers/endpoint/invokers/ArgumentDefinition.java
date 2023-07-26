@@ -1,7 +1,7 @@
 package org.logdoc.fairhttp.service.api.helpers.endpoint.invokers;
 
 import com.fasterxml.jackson.databind.JsonNode;
-import org.logdoc.fairhttp.service.http.Http;
+import org.logdoc.fairhttp.service.http.Request;
 import org.logdoc.fairhttp.service.tools.Form;
 import org.logdoc.fairhttp.service.tools.Json;
 import org.logdoc.fairhttp.service.tools.MultiForm;
@@ -29,7 +29,7 @@ public class ArgumentDefinition {
         this.paramName = paramName;
     }
 
-    Object resolve(final Map<String, String> query, final Map<String, String> cookies, final Form form, final MultiForm multiForm, final Map<String, String> pathMap, final JsonNode jsonBody, final Http.Request request) {
+    Object resolve(final Map<String, String> query, final Map<String, String> cookies, final Form form, final MultiForm multiForm, final Map<String, String> pathMap, final JsonNode jsonBody, final Request request) {
         if (container == Container.Request)
             return request;
 

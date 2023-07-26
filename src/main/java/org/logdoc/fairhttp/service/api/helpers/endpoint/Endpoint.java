@@ -1,7 +1,8 @@
 package org.logdoc.fairhttp.service.api.helpers.endpoint;
 
 import org.logdoc.fairhttp.service.api.helpers.endpoint.invokers.RequestInvoker;
-import org.logdoc.fairhttp.service.http.Http;
+import org.logdoc.fairhttp.service.http.Request;
+import org.logdoc.fairhttp.service.http.Response;
 
 import java.util.Map;
 import java.util.Objects;
@@ -20,7 +21,7 @@ public class Endpoint implements Comparable<Endpoint> {
     private final Signature signature;
     private final RequestInvoker invoker;
 
-    public Endpoint(final String method, final String endpoint, final BiFunction<Http.Request, Map<String, String>, CompletionStage<Http.Response>> callback) {
+    public Endpoint(final String method, final String endpoint, final BiFunction<Request, Map<String, String>, CompletionStage<Response>> callback) {
         this.method = notNull(method).trim().toUpperCase();
         signature = new Signature(endpoint);
         invoker = callback::apply;
@@ -51,7 +52,7 @@ public class Endpoint implements Comparable<Endpoint> {
         return this.method.equals(method) && signature.matches(hardPath);
     }
 
-    public CompletionStage<? extends Http.Response> call(final Http.Request request) {
+    public CompletionStage<? extends Response> call(final Request request) {
         return invoker.apply(request, signature.values(request.path()));
     }
 

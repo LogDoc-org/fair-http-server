@@ -40,13 +40,14 @@ Full form is rarely required, in most cases one or two parts can be omitted, whe
 ##### Primitive.
 
 ###### Handler:
+
 ```java
 import org.logdoc.fairhttp.service.api.Controller;
-import org.logdoc.fairhttp.service.http.Http;
+import org.logdoc.fairhttp.service.http.Response;
 
 public class MyController extends Controller {
 
-    public Http.Response getVersion() {
+    public Response getVersion() {
         return ok("1.0");
     }
 }
@@ -73,13 +74,14 @@ No path variables, no handlers arguments, nothing special. Parentheses are optio
 ##### Some path vars.
 
 ###### Handler:
+
 ```java
 import org.logdoc.fairhttp.service.api.Controller;
-import org.logdoc.fairhttp.service.http.Http;
+import org.logdoc.fairhttp.service.http.Response;
 
 public class MyController extends Controller {
 
-    public Http.Response sayHello(String name) {
+    public Response sayHello(String name) {
         return ok("Hello, " + name);
     }
 }
@@ -113,19 +115,20 @@ Hello, Robert
 ##### Path, query and types  
 
 ###### Handler:
+
 ```java
 import org.logdoc.fairhttp.service.api.Controller;
-import org.logdoc.fairhttp.service.http.Http;
+import org.logdoc.fairhttp.service.http.Response;
 
 public class MyController extends Controller {
 
-    public Http.Response sayHello(String name, boolean isFirstTime) {
+    public Response sayHello(String name, boolean isFirstTime) {
         String message;
-        if (isFirstTime) 
+        if (isFirstTime)
             message = "Hello again, ";
-        else 
+        else
             message = "Hello, ";
-        
+
         return ok(message + name);
     }
 }
@@ -165,23 +168,24 @@ Hello, Robert
 ##### Mixed names  
 
 ###### Handler:
+
 ```java
 import org.logdoc.fairhttp.service.api.Controller;
-import org.logdoc.fairhttp.service.http.Http;
+import org.logdoc.fairhttp.service.http.Response;
 
 public class MyController extends Controller {
 
-    public Http.Response sayHello(String firstName, String nickName, String lastName) {
+    public Response sayHello(String firstName, String nickName, String lastName) {
         String greet = "";
-        if (!firstName.trim().isBlank()) 
+        if (!firstName.trim().isBlank())
             greet = firstName + " ";
-        
+
         if (nickName != null && !nickName.trim().isBlank())
             greet += "*" + nickName.trim() + "* ";
-        
+
         if (lastName != null && !lastName.trim().isBlank())
             greet += lastName;
-        
+
         return ok("Hello, " + greet.trim());
     }
 }
@@ -227,13 +231,15 @@ public class LoginRequest {
 }
 ```
 ###### Handler:
+
 ```java
 import org.logdoc.fairhttp.service.api.Controller;
 import org.logdoc.fairhttp.service.http.Http;
+import org.logdoc.fairhttp.service.http.Response;
 
 public class MyController extends Controller {
 
-    public Http.Response doLogin(LoginRequest dto, String token, Http.Request request) {
+    public Response doLogin(LoginRequest dto, String token, Http.Request request) {
         if (token != null && isTokenValid(token))
             return ok("Welcome, frequenter");
 
@@ -246,13 +252,13 @@ public class MyController extends Controller {
                             .withName("my_token")
                             .withValue(tokenByLogin(dto.login))
                             .build());
-        
+
         return status(400, "Shall you pass, stranger");
     }
 
     private boolean isLoginSucceeded(LoginRequest dto) {
         // .... implementation
-        
+
         return true;
     }
 

@@ -4,6 +4,9 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.net.Socket;
 
 /**
  * @author Denis Danilin | me@loslobos.ru
@@ -13,27 +16,40 @@ import java.io.IOException;
 class WSHandler extends Thread {
     private static final Logger logger = LoggerFactory.getLogger(WSHandler.class);
 
-    private final SocketDriver driver;
+    private final Socket socket;
+    private final InputStream is;
+    private final OutputStream os;
 
-    private final Http.WebSocket ws;
+    private final WebSocket ws;
 
-    public WSHandler(final SocketDriver driver, final Http.WebSocket ws) {
-        this.driver = driver;
+    public WSHandler(final Socket socket, final WebSocket ws) throws IOException {
+        this.socket = socket;
         this.ws = ws;
-        ws.setWriteHandler(driver::write);
+
         setDaemon(true);
 
-        driver.soTimeout(0);
+        socket.setSoTimeout(0);
+        os = socket.getOutputStream();
+        is = socket.getInputStream();
+
+        this.ws.setWriteHandler(bytes -> {
+            try {
+                os.write(bytes);
+                os.flush();
+            } catch (IOException e) {
+                logger.error("Cant write to websocket :: " + e.getMessage(), e);
+            }
+        });
     }
 
     @Override
     public void run() {
         try {
-            driver.write(ws.asBytes());
+            os.write(ws.asBytes());
 
             do {
-                ws.accept(driver.read());
-            } while (!driver.isClosed());
+                ws.accept((byte) is.read());
+            } while (!socket.isClosed());
         } catch (final IOException e) {
             logger.error(e.getMessage(), e);
         }

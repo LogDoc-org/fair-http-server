@@ -4,7 +4,7 @@ import com.typesafe.config.Config;
 import com.typesafe.config.ConfigException;
 import org.logdoc.fairhttp.service.api.helpers.Headers;
 import org.logdoc.fairhttp.service.api.helpers.MimeType;
-import org.logdoc.fairhttp.service.http.Http;
+import org.logdoc.fairhttp.service.http.Response;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -70,13 +70,13 @@ public class BundledRead extends StaticRead {
     }
 
     @Override
-    public Http.Response apply(final String webpath) {
+    public Response apply(final String webpath) {
         final FRes p = resolve(webpath);
 
         if (!p.exists)
             return map404(webpath);
 
-        Http.Response response = pickCached(p.name);
+        Response response = pickCached(p.name);
 
         try {
             if (response != null)
@@ -88,7 +88,7 @@ public class BundledRead extends StaticRead {
                         if (resolve(webpath + '/' + idx).exists)
                             return apply(webpath + '/' + idx);
 
-                response = Http.Response.Forbidden();
+                response = Response.Forbidden();
             } else {
                 final int dot = p.name.lastIndexOf('.');
                 String mime = null;
@@ -115,7 +115,7 @@ public class BundledRead extends StaticRead {
                     }
                 }
 
-                response = Http.Response.Ok();
+                response = Response.Ok();
                 response.header(Headers.ContentType, mime);
                 response.header(Headers.ContentLength, p.size);
                 response.setPromise(os -> {
@@ -138,9 +138,9 @@ public class BundledRead extends StaticRead {
         } catch (final IOException e) {
             logger.error(e.getMessage(), e);
 
-            return Http.Response.ServerError();
+            return Response.ServerError();
         } finally {
-            final Http.Response finalResponse = response;
+            final Response finalResponse = response;
             CompletableFuture.runAsync(() -> cacheMe(webpath, finalResponse));
         }
     }

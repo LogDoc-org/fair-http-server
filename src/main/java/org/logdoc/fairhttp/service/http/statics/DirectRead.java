@@ -4,7 +4,7 @@ import com.typesafe.config.Config;
 import com.typesafe.config.ConfigException;
 import org.logdoc.fairhttp.service.api.helpers.Headers;
 import org.logdoc.fairhttp.service.api.helpers.MimeType;
-import org.logdoc.fairhttp.service.http.Http;
+import org.logdoc.fairhttp.service.http.Response;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -46,8 +46,8 @@ public class DirectRead extends StaticRead {
         logger.info("Static content root dir: " + this.root);
     }
 
-    public static Http.Response fileResponse(final Path p, final String mimeType, final long size) {
-        final Http.Response response = Http.Response.Ok();
+    public static Response fileResponse(final Path p, final String mimeType, final long size) {
+        final Response response = Response.Ok();
         response.header(Headers.ContentType, mimeType);
         response.header(Headers.ContentLength, size);
         response.setPromise(os -> {
@@ -67,7 +67,7 @@ public class DirectRead extends StaticRead {
     }
 
     @Override
-    public Http.Response apply(String webpath) {
+    public Response apply(String webpath) {
         webpath = webpath.replaceAll("/{2,}", "/");
         if (webpath.startsWith("/"))
             webpath = webpath.substring(1);
@@ -78,7 +78,7 @@ public class DirectRead extends StaticRead {
         if (!Files.exists(p))
             return map404(webpath);
 
-        Http.Response response = pickCached(webpath);
+        Response response = pickCached(webpath);
 
         try {
             if (response != null)
@@ -92,7 +92,7 @@ public class DirectRead extends StaticRead {
                 }
 
                 if (autoDirList) {
-                    response = Http.Response.Ok();
+                    response = Response.Ok();
                     try (final Stream<Path> fs = Files.list(p)) {
                         response.setPayload(dirList(p.getFileName().toString(), fs
                                 .map(f -> {
@@ -113,7 +113,7 @@ public class DirectRead extends StaticRead {
                                 .collect(Collectors.toList())), MimeType.TEXTHTML);
                     }
                 } else
-                    response = Http.Response.Forbidden();
+                    response = Response.Forbidden();
             } else {
                 final int dot = p.getFileName().toString().lastIndexOf('.');
                 String mime = null;
@@ -140,7 +140,7 @@ public class DirectRead extends StaticRead {
 
                 long size = Files.size(p);
 
-                response = Http.Response.Ok();
+                response = Response.Ok();
                 response.header(Headers.ContentType, mime);
                 response.header(Headers.ContentLength, size);
                 response.setPromise(os -> {
@@ -161,7 +161,7 @@ public class DirectRead extends StaticRead {
         } catch (final IOException e) {
             logger.error(e.getMessage(), e);
 
-            return Http.Response.ServerError();
+            return Response.ServerError();
         } finally {
             cacheMe(webpath, response);
         }

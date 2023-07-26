@@ -4,6 +4,8 @@ import com.fasterxml.jackson.databind.JsonNode;
 import org.logdoc.fairhttp.service.api.Controller;
 import org.logdoc.fairhttp.service.api.helpers.endpoint.invokers.*;
 import org.logdoc.fairhttp.service.http.Http;
+import org.logdoc.fairhttp.service.http.Request;
+import org.logdoc.fairhttp.service.http.Response;
 import org.logdoc.helpers.Texts;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -87,7 +89,7 @@ class InvokerFactory {
         try {
             final Args args = doInvokerData(invokerData);
 
-            if (Http.Response.class.isAssignableFrom(args.targetMethod.getReturnType())) {
+            if (Response.class.isAssignableFrom(args.targetMethod.getReturnType())) {
                 if (args.size() == 0)
                     return new EmptyInvoker(args.targetMethod);
 
@@ -171,7 +173,7 @@ class InvokerFactory {
                         break;
                     }
 
-                    if (m.getParameterCount() == 1 && Http.Request.class.isAssignableFrom(m.getParameterTypes()[0])) {
+                    if (m.getParameterCount() == 1 && org.logdoc.fairhttp.service.http.Request.class.isAssignableFrom(m.getParameterTypes()[0])) {
                         method = m;
                         break;
                     }
@@ -249,7 +251,7 @@ class InvokerFactory {
                                             if (right == d.length() - 1) { // body or request
                                                 ad.container = valueOf(d.substring(left + 1, right));
                                                 if (ad.container == Request)
-                                                    ad.cls = Http.Request.class;
+                                                    ad.cls = org.logdoc.fairhttp.service.http.Request.class;
                                                 else if (ad.container != Body)
                                                     throw new UnknownFormatFlagsException(d);
                                             } else {
@@ -295,9 +297,9 @@ class InvokerFactory {
                 final ArgData ad = get(i);
                 final Class<?> cls = types[i];
 
-                if (cls.equals(Http.Request.class) && ad.cls != null && !ad.cls.equals(cls)) {
+                if (cls.equals(Request.class) && ad.cls != null && !ad.cls.equals(cls)) {
                     final ArgData msd = new ArgData();
-                    msd.cls = Http.Request.class;
+                    msd.cls = Request.class;
                     msd.container = Request;
 
                     add(i--, msd);

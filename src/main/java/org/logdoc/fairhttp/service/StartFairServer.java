@@ -4,7 +4,7 @@ import com.typesafe.config.Config;
 import com.typesafe.config.ConfigFactory;
 import org.logdoc.fairhttp.service.api.helpers.MimeType;
 import org.logdoc.fairhttp.service.api.helpers.Preloaded;
-import org.logdoc.fairhttp.service.http.Http;
+import org.logdoc.fairhttp.service.http.Response;
 import org.logdoc.fairhttp.service.http.Server;
 import org.logdoc.fairhttp.service.tools.ErrorHandler;
 import org.slf4j.Logger;
@@ -59,7 +59,7 @@ public class StartFairServer {
 
         s.setupErrorHandler(t -> {
             errorLogger.error(t.getMessage(), t);
-            final Http.Response response = Http.Response.ServerError();
+            final Response response = Response.ServerError();
             if (t.getMessage() != null)
                 response.setPayload(t.getMessage().getBytes(StandardCharsets.UTF_8), MimeType.TEXTPLAIN);
 

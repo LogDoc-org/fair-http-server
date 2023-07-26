@@ -24,6 +24,7 @@ import java.util.TreeSet;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 import java.util.function.BiFunction;
+import java.util.function.Consumer;
 import java.util.function.Function;
 
 import static org.logdoc.fairhttp.service.http.statics.BundledRead.PlaceHolder;
@@ -41,14 +42,16 @@ public class Server {
 
     private final SortedSet<Endpoint> endpoints;
     private final int port, maxRequestBytes;
-    private final Function<String, Http.Response> assets;
+    private final int readTimeout;
+    private final Function<String, Response> assets;
     private final CORS cors;
 
-    private Function<Throwable, Http.Response> errorHandler;
+    private Function<Throwable, Response> errorHandler;
 
     public Server(final int port, final int maxRequestBytes) { // minimal
         this.port = port;
         this.maxRequestBytes = maxRequestBytes;
+        this.readTimeout = 15000;
         this.endpoints = new TreeSet<>();
 
         assets = new NoStatics();
@@ -65,13 +68,14 @@ public class Server {
 
         port = config.getInt(ConfigPath.PORT);
         maxRequestBytes = config.getBytes(ConfigPath.MAX_REQUEST).intValue();
+        readTimeout = (int) config.getDuration(ConfigPath.READ_TIMEOUT).getSeconds() * 1000;
 
         this.endpoints = new TreeSet<>();
 
         final Config staticsCfg = ConfigTools.sureConf(config, "fair.http.statics");
         final String dir = staticsCfg != null && staticsCfg.hasPath("root") && !staticsCfg.getIsNull("root") ? notNull(staticsCfg.getString("root")) : null;
 
-        Function<String, Http.Response> assets0 = new NoStatics();
+        Function<String, Response> assets0 = new NoStatics();
 
         try {
             if (!isEmpty(dir)) {
@@ -83,7 +87,7 @@ public class Server {
                         assets0 = new DirectRead(staticsCfg, dir);
                 }
             } else
-                logger.debug("No statics: dir is empty `"+dir+"`");
+                logger.debug("No statics: dir is empty `" + dir + "`");
         } catch (final IllegalStateException ise) {
             logger.error("Cant setup static assets: " + ise.getMessage() + ", noop.");
             assets0 = new NoStatics();
@@ -102,7 +106,7 @@ public class Server {
                     child = socket.accept();
 
                     if (child != null)
-                        new Handler(child, this, maxRequestBytes).start();
+                        new Handler(child, this, maxRequestBytes, readTimeout).start();
                 } while (child != null);
             } catch (final Exception e) {
                 e.printStackTrace();
@@ -124,37 +128,35 @@ public class Server {
         }
     }
 
-    void handleRequest(final Handler handler) {
-        final String hardPath = handler.request.path();
-
+    void handleRequest(final Request request, final Consumer<Response> responseConsumer) {
         boolean hasMatchPath = false;
 
+        final Function<Throwable, Void> errorHandler = t -> {
+            responseConsumer.accept(Server.this.errorHandler.apply(t));
+
+            return null;
+        };
+
         for (final Endpoint e : endpoints)
-            if (e.match(handler.request.method, hardPath)) {
-                final Function<Throwable, Void> errorHandler = t -> {
-                    handler.response(Server.this.errorHandler.apply(t));
-
-                    return null;
-                };
-
-                CompletableFuture.runAsync(() -> e.call(handler.request)
-                        .thenApply(rsp -> cors.wrap(handler.request, rsp))
-                        .thenAccept(handler::response)
+            if (e.match(request.method(), request.path())) {
+                CompletableFuture.runAsync(() -> e.call(request)
+                        .thenApply(rsp -> cors.wrap(request, rsp))
+                        .thenAccept(responseConsumer)
                         .exceptionally(errorHandler));
 
                 return;
-            } else if (!hasMatchPath && e.pathMatch(hardPath))
+            } else if (!hasMatchPath && e.pathMatch(request.path()))
                 hasMatchPath = true;
 
-        if (hasMatchPath && handler.request.method.equals("OPTIONS")) {
-            handler.response(cors.wrap(handler.request, Http.Response.NoContent()));
+        if (hasMatchPath && request.method().equals("OPTIONS")) {
+            responseConsumer.accept(cors.wrap(request, Response.NoContent()));
             return;
         }
 
-        if (handler.request.method.equals("GET"))
-            CompletableFuture.runAsync(() -> handler.response(assets.apply(handler.request.path())));
+        if (request.method().equals("GET"))
+            CompletableFuture.runAsync(() -> responseConsumer.accept(assets.apply(request.uri()))).exceptionally(errorHandler);
         else
-            handler.response(Http.Response.NotFound());
+            responseConsumer.accept(Response.NotFound());
     }
 
     public synchronized void setupDynamicEndpoints(final Collection<DynamicRoute> routes) {
@@ -191,11 +193,11 @@ public class Server {
         return false;
     }
 
-    public synchronized boolean addEndpoint(final String method, final String endpoint, final BiFunction<Http.Request, Map<String, String>, CompletionStage<Http.Response>> callback) {
+    public synchronized boolean addEndpoint(final String method, final String endpoint, final BiFunction<Request, Map<String, String>, CompletionStage<Response>> callback) {
         return endpoints.add(new Endpoint(method, endpoint, callback));
     }
 
-    public void setupErrorHandler(final Function<Throwable, Http.Response> errorHandler) {
+    public void setupErrorHandler(final Function<Throwable, Response> errorHandler) {
         if (errorHandler != null)
             this.errorHandler = errorHandler;
     }
