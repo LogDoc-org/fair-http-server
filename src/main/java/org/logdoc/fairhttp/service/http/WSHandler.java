@@ -53,7 +53,7 @@ class WSHandler extends Thread {
             do {
                 ws.accept((byte) is.read());
             } while (!socket.isClosed());
-        } catch (final IOException e) {
+        } catch (final Exception e) {
             logger.error(e.getMessage(), e);
             try { socket.close(); } catch (final Exception ignore) { }
             try { ws.close(CloseFrame.ABNORMAL_CLOSE, e.getMessage()); } catch (final Exception ignore) { }

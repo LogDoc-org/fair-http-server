@@ -129,10 +129,9 @@ public abstract class WebSocket extends Response implements Consumer<Byte> {
                 mask = (b & -128) != 0;
                 payloadlength = (byte) (b & ~(byte) 128);
 
-                if (payloadlength > 125 && optcode == Opcode.PING || optcode == Opcode.PONG || optcode == Opcode.CLOSING)
-                    throw new IllegalArgumentException("more than 125 octets");
-
                 if (payloadlength > 125) {
+                    if (optcode == Opcode.PING || optcode == Opcode.PONG || optcode == Opcode.CLOSING)
+                        throw new IllegalArgumentException("more than 125 octets");
 
                     if (payloadlength == 126) {
                         drive = new Http.Drive(2, bytes -> {
