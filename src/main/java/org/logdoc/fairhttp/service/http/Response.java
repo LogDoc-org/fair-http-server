@@ -29,8 +29,8 @@ import static org.logdoc.helpers.Texts.notNull;
 public class Response {
     private static final byte[] FEED = new byte[]{'\r', '\n'};
     private static final byte[] PROTO = "HTTP/1.1".getBytes(StandardCharsets.US_ASCII);
-    private final Map<String, String> headers;
-    private final Set<Http.Cookie> cookies;
+    protected final Map<String, String> headers;
+    private final Set<Cookie> cookies;
     private int code;
     private String message;
     private byte[] payload;
@@ -132,7 +132,7 @@ public class Response {
                     os.write(FEED);
                 }
 
-            for (final Http.Cookie c : cookies) {
+            for (final Cookie c : cookies) {
                 os.write((Headers.ResponseCookies + ": " + c).getBytes(StandardCharsets.UTF_8));
                 os.write(FEED);
             }
@@ -155,9 +155,9 @@ public class Response {
         return code + (isEmpty(message) ? "" : " " + message) + (payload == null ? "" : " :: " + payload.length + " bytes");
     }
 
-    public Response withCookie(final Http.Cookie... cookies) {
+    public Response withCookie(final Cookie... cookies) {
         if (!isEmpty(cookies))
-            for (final Http.Cookie c : cookies)
+            for (final Cookie c : cookies)
                 if (c != null)
                     this.cookies.add(c);
 

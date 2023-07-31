@@ -4,12 +4,16 @@ import com.fasterxml.jackson.databind.JsonNode;
 import org.logdoc.fairhttp.service.api.helpers.Headers;
 import org.logdoc.fairhttp.service.api.helpers.MimeType;
 import org.logdoc.fairhttp.service.tools.*;
+import org.logdoc.fairhttp.service.tools.websocket.extension.IExtension;
+import org.logdoc.fairhttp.service.tools.websocket.protocol.IProtocol;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.net.SocketAddress;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
@@ -19,6 +23,7 @@ import java.util.regex.Pattern;
 
 import static org.logdoc.fairhttp.service.tools.HttpBinStreaming.getBoundary;
 import static org.logdoc.fairhttp.service.tools.HttpBinStreaming.stringQuotes;
+import static org.logdoc.fairhttp.service.tools.websocket.protocol.IProtocol.WS_VERSION;
 import static org.logdoc.helpers.Texts.isEmpty;
 import static org.logdoc.helpers.Texts.notNull;
 
@@ -42,6 +47,24 @@ public class Request {
         this.rawHead = rawHead;
         this.remote = remote;
         this.bodySupplier = bodySupplier;
+    }
+
+    public boolean isWebsocketUpgradable() {
+        return isWebsocketUpgradable(null, null);
+    }
+
+    public boolean isWebsocketUpgradable(final IExtension extension) {
+        return isWebsocketUpgradable(extension, null);
+    }
+
+    public boolean isWebsocketUpgradable(final IExtension extension, final IProtocol protocol) {
+        try {MessageDigest.getInstance("SHA-1");} catch (final NoSuchAlgorithmException ignore) {
+            return false;
+        }
+
+        return WS_VERSION.equals(header(Headers.SecWebsocketVersion))
+                && (extension == null || extension.acceptProvidedExtensionAsServer(header(Headers.SecWebsocketExtensions)))
+                && (protocol == null || protocol.acceptProtocol(header(Headers.SecWebsocketProtocols)));
     }
 
     public SocketAddress getRemote() {

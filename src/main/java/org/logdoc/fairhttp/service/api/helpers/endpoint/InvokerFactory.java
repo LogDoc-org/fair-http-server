@@ -3,7 +3,6 @@ package org.logdoc.fairhttp.service.api.helpers.endpoint;
 import com.fasterxml.jackson.databind.JsonNode;
 import org.logdoc.fairhttp.service.api.Controller;
 import org.logdoc.fairhttp.service.api.helpers.endpoint.invokers.*;
-import org.logdoc.fairhttp.service.http.Http;
 import org.logdoc.fairhttp.service.http.Request;
 import org.logdoc.fairhttp.service.http.Response;
 import org.logdoc.helpers.Texts;

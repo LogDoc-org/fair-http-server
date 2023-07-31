@@ -248,7 +248,7 @@ public class MyController extends Controller {
 
         if (dto != null && isLoginSucceeded(dto))
             return ok("Welcome, stranger")
-                    .withCookie(new Http.CookieBuilder()
+                    .withCookie(new Http.Builder()
                             .withName("my_token")
                             .withValue(tokenByLogin(dto.login))
                             .build());

@@ -1,114 +1,66 @@
 package org.logdoc.fairhttp.service.http;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import org.logdoc.fairhttp.service.api.helpers.Headers;
 import org.logdoc.fairhttp.service.tools.websocket.Opcode;
 import org.logdoc.fairhttp.service.tools.websocket.extension.DefaultExtension;
 import org.logdoc.fairhttp.service.tools.websocket.extension.IExtension;
 import org.logdoc.fairhttp.service.tools.websocket.frames.*;
-import org.logdoc.fairhttp.service.tools.websocket.protocol.IProtocol;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.w3c.dom.Document;
-import org.xml.sax.InputSource;
+import org.logdoc.helpers.Texts;
 
-import javax.xml.parsers.DocumentBuilder;
-import javax.xml.parsers.DocumentBuilderFactory;
-import javax.xml.transform.Transformer;
-import javax.xml.transform.TransformerException;
-import javax.xml.transform.TransformerFactory;
-import javax.xml.transform.dom.DOMSource;
-import javax.xml.transform.stream.StreamResult;
-import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.math.BigInteger;
+import java.net.InetSocketAddress;
+import java.net.Socket;
 import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
-import java.util.Base64;
 import java.util.function.Consumer;
-
-import static org.logdoc.fairhttp.service.tools.websocket.protocol.IProtocol.RFC_KEY_UUID;
-import static org.logdoc.fairhttp.service.tools.websocket.protocol.IProtocol.WS_VERSION;
 
 /**
  * @author Denis Danilin | me@loslobos.ru
  * 26.07.2023 17:30
  * fair-http-server ☭ sweat and blood
  */
-public abstract class WebSocket extends Response implements Consumer<Byte> {
-    private static final Logger logger = LoggerFactory.getLogger(WebSocket.class);
-
-    private IExtension extension;
-    private IProtocol protocol;
-    private ObjectMapper om;
-    private DocumentBuilder xb;
-    private Transformer tr;
+public final class WebSocket extends Response {
+    final Consumer<ErrorRef> readErrorConsumer, writeErrorConsumer;
+    private final IExtension extension;
+    private final Consumer<String> textConsumer;
+    private final Consumer<byte[]> binaryConsumer;
+    private final Consumer<WebSocket> pingConsumer, pongConsumer;
+    private final Consumer<CloseReason> closeConsumer;
     private int frameStage, payloadlength;
     private AFrame frame;
     private Frame incompleteframe;
     private Opcode optcode;
-    private boolean mask;
-    private Http.Drive drive;
+    private boolean mask, closed;
+    private Drive drive;
     private byte[] payload, maskkey;
+    private OutputStream os;
+    private InetSocketAddress remote;
 
-    private Consumer<byte[]> writeConsumer;
-
-    public WebSocket(final Request request) {
+    WebSocket(final IExtension extension, final Consumer<String> textConsumer, final Consumer<byte[]> binaryConsumer, final Consumer<WebSocket> pingConsumer, final Consumer<WebSocket> pongConsumer, final Consumer<CloseReason> closeConsumer, final Consumer<ErrorRef> readErrorConsumer, final Consumer<ErrorRef> writeErrorConsumer) {
         super(101, "Websocket Connection Upgrade");
-
-        header(Headers.Upgrade, "websocket");
-        header(Headers.Connection, Headers.Upgrade);
-
-        prepare(request);
-    }
-
-    public WebSocket(final Request request, final IExtension extension) {
-        this(request, extension, null);
-    }
-
-    public WebSocket(final Request request, final IExtension extension, final IProtocol protocol) {
-        super(101, "Websocket Connection Upgrade");
-
-        header(Headers.Upgrade, "websocket");
-        header(Headers.Connection, Headers.Upgrade);
-
         this.extension = extension;
-        this.protocol = protocol;
-
-        prepare(request);
+        this.textConsumer = textConsumer;
+        this.binaryConsumer = binaryConsumer;
+        this.pingConsumer = pingConsumer;
+        this.pongConsumer = pongConsumer;
+        this.closeConsumer = closeConsumer;
+        this.readErrorConsumer = readErrorConsumer;
+        this.writeErrorConsumer = writeErrorConsumer;
     }
 
-    private void prepare(final Request request) {
-        if (!WS_VERSION.equals(request.header(Headers.SecWebsocketVersion)))
-            throw new IllegalStateException("Wrong websocket version: " + request.header(Headers.SecWebsocketVersion) + ", expected: " + WS_VERSION);
-
-        final String id;
-        try {
-            id = Base64.getEncoder().encodeToString(MessageDigest.getInstance("SHA1").digest((request.header(Headers.SecWebsocketKey) + RFC_KEY_UUID).getBytes()));
-        } catch (NoSuchAlgorithmException e) {
-            throw new RuntimeException(e);
-        }
-        header(Headers.SecWebsocketAccept, id);
-        if (extension != null && extension.acceptProvidedExtensionAsServer(request.header(Headers.SecWebsocketExtensions)))
-            header(Headers.SecWebsocketExtensions, extension.getProvidedExtensionAsServer());
-        else if (extension != null)
-            throw new IllegalStateException("Cant accept requested extenstion(s): " + request.header(Headers.SecWebsocketExtensions));
-
-        if (protocol != null && protocol.acceptProtocol(request.header(Headers.SecWebsocketProtocols)))
-            header(Headers.SecWebsocketProtocols, protocol.getProvidedProtocol());
-        else if (protocol != null)
-            throw new IllegalStateException("Cant accept requested protocol(s): " + request.header(Headers.SecWebsocketProtocols));
-
-        if (extension == null)
-            extension = new DefaultExtension();
+    public InetSocketAddress remote() {
+        return remote;
     }
 
-    @Override
-    public final void accept(final Byte b) {
-        if (b == null || b == -1)
+    public String wsId() {
+        return headers.get(Headers.SecWebsocketAccept);
+    }
+
+    private void nextByte(final byte b) {
+        if (closed || b == -1)
             return;
 
         switch (frameStage++) {
@@ -118,6 +70,11 @@ public abstract class WebSocket extends Response implements Consumer<Byte> {
                 break;
             case 0:
                 optcode = toOpcode((byte) (b & 15));
+                if (optcode == null) {
+                    readErrorConsumer.accept(error("Unknown opcode " + (short) (b & 15)));
+                    return;
+                }
+
                 frame = AFrame.get(optcode);
 
                 frame.setFin(b >> 8 != 0);
@@ -130,11 +87,13 @@ public abstract class WebSocket extends Response implements Consumer<Byte> {
                 payloadlength = (byte) (b & ~(byte) 128);
 
                 if (payloadlength > 125) {
-                    if (optcode == Opcode.PING || optcode == Opcode.PONG || optcode == Opcode.CLOSING)
-                        throw new IllegalArgumentException("more than 125 octets");
+                    if (optcode == Opcode.PING || optcode == Opcode.PONG || optcode == Opcode.CLOSING) {
+                        readErrorConsumer.accept(error("more than 125 octets payload"));
+                        return;
+                    }
 
                     if (payloadlength == 126) {
-                        drive = new Http.Drive(2, bytes -> {
+                        drive = new Drive(2, bytes -> {
                             frameStage = 2;
                             final byte[] sizebytes = new byte[3];
                             sizebytes[1] = bytes[0];
@@ -142,7 +101,7 @@ public abstract class WebSocket extends Response implements Consumer<Byte> {
                             payloadlength = new BigInteger(sizebytes).intValue();
                         });
                     } else {
-                        drive = new Http.Drive(8, bytes -> {
+                        drive = new Drive(8, bytes -> {
                             frameStage = 2;
                             payloadlength = (int) new BigInteger(bytes).longValue();
                         });
@@ -156,17 +115,17 @@ public abstract class WebSocket extends Response implements Consumer<Byte> {
                 payload = new byte[payloadlength];
                 frameStage = -1;
                 if (mask) {
-                    drive = new Http.Drive(4, bytes -> {
+                    drive = new Drive(4, bytes -> {
                         maskkey = bytes;
 
-                        drive = new Http.Drive(payloadlength, bb -> {
+                        drive = new Drive(payloadlength, bb -> {
                             frameStage = 3;
                             for (int i = 0; i < payloadlength; i++)
                                 payload[i] = (byte) (bb[i] ^ maskkey[i % 4]);
                         });
                     });
                 } else
-                    drive = new Http.Drive(payloadlength, bytes -> {
+                    drive = new Drive(payloadlength, bytes -> {
                         frameStage = 3;
                         payload = bytes;
                     });
@@ -191,12 +150,12 @@ public abstract class WebSocket extends Response implements Consumer<Byte> {
                         if (frame.isValid())
                             process(frame);
                         else
-                            logger.error("Invalid frame catched: " + frame);
+                            readErrorConsumer.accept(error("Invalid frame catched: " + frame));
                     } catch (final Exception e) {
-                        logger.error("Frame processing error: " + frame + " :: " + e.getMessage(), e);
+                        readErrorConsumer.accept(error("Frame processing error: " + frame + " :: " + e.getMessage(), e));
                     }
                 else
-                    logger.error("Extension cant decode frame: " + frame);
+                    readErrorConsumer.accept(error("Extension cant decode frame: " + frame));
 
                 break;
         }
@@ -216,71 +175,47 @@ public abstract class WebSocket extends Response implements Consumer<Byte> {
 
             close(code, reason, true);
         } else if (curop == Opcode.PING)
-            onPing();
+            pingConsumer.accept(this);
         else if (curop == Opcode.PONG)
-            onPong();
+            pongConsumer.accept(this);
         else if (!frame.isFin() || curop == Opcode.CONTINUOUS)
             processFrameContinuousAndNonFin(frame, curop);
         else if (incompleteframe != null)
-            throw new IllegalStateException("Continuous frame sequence not completed.");
+            readErrorConsumer.accept(error("Continuous frame sequence not completed."));
         else
-            frameReady(frame);
+            contentReady(frame);
     }
 
-    private void frameReady(final Frame frame) {
+    private void contentReady(final Frame frame) {
+
         final byte[] data = frame.getPayloadData();
 
-        if (frame.getOpcode() == Opcode.TEXT) {
-            final String text = new String(data, StandardCharsets.UTF_8).trim();
-
-            if ((text.startsWith("{") && text.endsWith("}")) || (text.startsWith("[") && text.endsWith("]"))) {
-                if (om == null)
-                    om = new ObjectMapper();
-
-                try {
-                    onJson(om.readTree(text));
-                    return;
-                } catch (final Exception ignore) {
-                }
-            }
-
-            if (text.toLowerCase().startsWith("<") && text.endsWith(">")) {
-                if (xb == null)
-                    try {
-                        xb = DocumentBuilderFactory.newInstance().newDocumentBuilder();
-                    } catch (final Exception ignore) {
-                    }
-
-                if (xb != null)
-                    try {
-                        onXml(xb.parse(new InputSource(new ByteArrayInputStream(data))));
-
-                        return;
-                    } catch (final Exception ignore) {
-                    }
-            }
-
-            onText(text);
-        } else if (frame.getOpcode() == Opcode.BINARY)
-            onBytes(data);
+        if (frame.getOpcode() == Opcode.TEXT)
+            textConsumer.accept(new String(data, StandardCharsets.UTF_8));
+        else if (frame.getOpcode() == Opcode.BINARY)
+            binaryConsumer.accept(data);
     }
 
     private void processFrameContinuousAndNonFin(final Frame frame, final Opcode curop) {
         if (curop != Opcode.CONTINUOUS) {
             incompleteframe = frame;
         } else if (frame.isFin()) {
-            if (incompleteframe == null)
-                throw new IllegalStateException("Continuous frame sequence was not started.");
+            if (incompleteframe == null) {
+                readErrorConsumer.accept(error("Continuous frame sequence was not started."));
+                return;
+            }
 
             incompleteframe.append(frame);
 
             ((AFrame) incompleteframe).isValid();
 
-            frameReady(incompleteframe);
+            contentReady(incompleteframe);
 
             incompleteframe = null;
-        } else if (incompleteframe == null)
-            throw new IllegalStateException("Continuous frame sequence was not started.");
+        } else if (incompleteframe == null) {
+            readErrorConsumer.accept(error("Continuous frame sequence was not started."));
+            return;
+        }
 
         if (curop == Opcode.CONTINUOUS && incompleteframe != null)
             incompleteframe.append(frame);
@@ -301,101 +236,60 @@ public abstract class WebSocket extends Response implements Consumer<Byte> {
             case 10:
                 return Opcode.PONG;
             default:
-                throw new IllegalArgumentException("Unknown opcode " + (short) opcode);
+                return null;
         }
     }
 
-    public final void close() {
+    public void close() {
         close(CloseFrame.NORMAL, null, false);
     }
 
-    public final void close(final int code, final String reason) {
+    public void close(final int code, final String reason) {
         close(code, reason, false);
     }
 
     private void close(final int code, final String reason, final boolean remote) {
+        if (closed) return;
+
+        synchronized (this) {
+            closed = true;
+        }
+
         if (!remote)
             try {sendFrame(new CloseFrame(code, reason));} catch (final Exception ignore) {}
 
-        try {onClose(code, reason, remote);} catch (final Exception ignore) {}
+        if (os != null)
+            try {os.close();} catch (final Exception ignore) {}
+
+        closeConsumer.accept(new CloseReason(code, reason, remote));
     }
-
-    public abstract void onJson(JsonNode json);
-
-    public abstract void onXml(Document xml);
-
-    public abstract void onText(String text);
-
-    public abstract void onBytes(byte[] bytes);
-
-    public abstract void onPing();
-
-    public abstract void onPong();
-
-    public abstract void onClose(int code, String reason, boolean remote);
 
     public void ping() {
         sendFrame(new PingFrame());
     }
 
-    public void send(final JsonNode message) {
-        if (message == null)
-            throw new NullPointerException("Message");
-
-        if (om == null)
-            om = new ObjectMapper();
-
-        try {
-            final TextFrame frame = new TextFrame();
-            frame.setPayload(message.toString().getBytes(StandardCharsets.UTF_8));
-            frame.setMasked(true);
-
-            sendFrame(frame);
-        } catch (final Exception e) {
-            throw new IllegalStateException(e);
-        }
-    }
-
-    public void send(final Document message) {
-        if (message == null)
-            throw new NullPointerException("Message");
-
-        if (tr == null)
-            try {
-                tr = TransformerFactory.newInstance().newTransformer();
-            } catch (final Exception e) {
-                throw new IllegalStateException(e);
-            }
-
-        try (final ByteArrayOutputStream buf = new ByteArrayOutputStream(1024 * 16)) {
-            tr.transform(new DOMSource(message), new StreamResult(buf));
-
-            buf.flush();
-
-            final TextFrame frame = new TextFrame();
-            frame.setPayload(buf.toByteArray());
-            frame.setMasked(true);
-
-            sendFrame(frame);
-        } catch (final TransformerException | IOException e) {
-            throw new IllegalStateException(e);
-        }
+    public void pong() {
+        sendFrame(new PongFrame());
     }
 
     public void send(final String message) {
-        if (message == null)
-            throw new NullPointerException("Message");
+        if (message == null) {
+            writeErrorConsumer.accept(error("Message is null"));
+            return;
+        }
 
         final TextFrame frame = new TextFrame();
-        frame.setPayload(message.getBytes(StandardCharsets.UTF_8));
         frame.setMasked(true);
+        frame.setPayload(message.getBytes(StandardCharsets.UTF_8));
 
         sendFrame(frame);
     }
 
     public void send(final byte[] message) {
-        if (message == null)
-            throw new NullPointerException("Message");
+        if (message == null) {
+            writeErrorConsumer.accept(error("Message is null"));
+            return;
+        }
 
         final BinaryFrame frame = new BinaryFrame();
         frame.setMasked(true);
@@ -404,19 +298,32 @@ public abstract class WebSocket extends Response implements Consumer<Byte> {
         sendFrame(frame);
     }
 
-    protected synchronized void sendFrame(final AFrame framedata) {
-        if (framedata == null)
-            throw new NullPointerException("Frame");
+    private synchronized void sendFrame(final AFrame framedata) {
+        if (closed) {
+            writeErrorConsumer.accept(error("Websocket is closed"));
+            return;
+        }
 
-        if (!framedata.isValid())
-            throw new IllegalStateException("Invalid frame");
+        if (framedata == null) {
+            writeErrorConsumer.accept(error("Frame is null"));
+            return;
+        }
 
-        try (final ByteArrayOutputStream os = new ByteArrayOutputStream(1024 * 4)) {
+        if (!framedata.isValid()) {
+            writeErrorConsumer.accept(error("Invalid frame"));
+            return;
+        }
+
+        try {
             extension.encodeFrame(framedata);
 
             final byte[] mes = framedata.getPayloadData();
             final int sizebytes = getSizeBytes(mes);
             final byte optcode = fromOpcode(framedata.getOpcode());
+            if (optcode == -1) {
+                writeErrorConsumer.accept(error("Don't know how to handle " + framedata.getOpcode()));
+                return;
+            }
             byte one = (byte) (framedata.isFin() ? -128 : 0);
             one |= optcode;
             if (framedata.isRSV1()) one |= getRSVByte(1);
@@ -434,20 +341,15 @@ public abstract class WebSocket extends Response implements Consumer<Byte> {
             } else if (sizebytes == 8) {
                 os.write((byte) 127);
                 os.write(payloadlengthbytes);
-            } else
-                throw new IllegalStateException("Size representation not supported/specified");
+            } else {
+                writeErrorConsumer.accept(error("Size representation not supported/specified"));
+                return;
+            }
 
             os.write(mes);
             os.flush();
-
-            writeConsumer.accept(os.toByteArray());
-        } catch (final IOException e) {
-            close(CloseFrame.ABNORMAL_CLOSE, e.getMessage(), false);
-            throw new IllegalStateException(e);
-        } catch (final IllegalStateException e) {
-            throw e;
         } catch (final Exception e) {
-            throw new IllegalStateException(e);
+            writeErrorConsumer.accept(error(Texts.notNull(e.getMessage()), e));
         }
     }
 
@@ -498,11 +400,102 @@ public abstract class WebSocket extends Response implements Consumer<Byte> {
             case PONG:
                 return 10;
             default:
-                throw new IllegalArgumentException("Don't know how to handle " + opcode);
+                return -1;
         }
     }
 
-    void setWriteHandler(final Consumer<byte[]> writeConsumer) {
-        this.writeConsumer = writeConsumer;
+    private ErrorRef error(final String error) {
+        return error(error, null);
+    }
+
+    private ErrorRef error(final String error, final Throwable cause) {
+        return new ErrorRef(this, error, cause);
+    }
+
+    void spinOff(final Socket socket) {
+        try {
+            socket.setSoTimeout(0);
+            os = socket.getOutputStream();
+            remote = (InetSocketAddress) socket.getRemoteSocketAddress();
+
+            new Thread(() -> {
+                try {
+                    os.write(WebSocket.this.asBytes());
+
+                    final InputStream is = socket.getInputStream();
+
+                    do {
+                        nextByte((byte) is.read());
+                    } while (!socket.isClosed());
+                } catch (final Exception e) {
+                    readErrorConsumer.accept(error("Critical socket error", e));
+                    close(CloseFrame.BUGGYCLOSE, e.getMessage());
+                }
+            }) {
+                @Override
+                public synchronized void start() {
+                    setDaemon(true);
+                    super.start();
+                }
+            }.start();
+        } catch (final IOException e) {
+            readErrorConsumer.accept(error("Critical socket error", e));
+            close(CloseFrame.BUGGYCLOSE, e.getMessage());
+        }
+    }
+
+    private static class Drive implements Consumer<Byte> {
+        private final ByteArrayOutputStream buf;
+        private final Consumer<byte[]> finisher;
+        private final int size;
+
+        Drive(final int size, final Consumer<byte[]> finisher) {
+            buf = new ByteArrayOutputStream(size);
+            this.size = size;
+            this.finisher = finisher;
+        }
+
+        @Override
+        public void accept(final Byte b) {
+            buf.write(b);
+
+            if (buf.size() == size) {
+                finisher.accept(buf.toByteArray());
+                buf.reset();
+            }
+        }
+    }
+
+    public static class CloseReason {
+        public final int code;
+        public final String reason;
+        public final boolean remotelyInited;
+
+        private CloseReason(final int code, final String reason, final boolean remotelyInited) {
+            this.code = code;
+            this.reason = reason;
+            this.remotelyInited = remotelyInited;
+        }
+
+        @Override
+        public String toString() {
+            return "CloseReason{" +
+                    "code=" + code +
+                    ", reason='" + reason + '\'' +
+                    ", remotelyInited=" + remotelyInited +
+                    '}';
+        }
+    }
+
+    public static class ErrorRef {
+        public final WebSocket ws;
+        public final String error;
+        public final Throwable cause;
+
+        private ErrorRef(final WebSocket ws, final String error, final Throwable cause) {
+            this.ws = ws;
+            this.error = error;
+            this.cause = cause;
+        }
     }
 }

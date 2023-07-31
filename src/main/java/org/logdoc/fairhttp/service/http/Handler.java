@@ -31,7 +31,7 @@ public class Handler extends Thread {
     private final String id;
     private final int maxRequestSize, readTimeout;
 
-    Handler(final Socket socket, final Server server, final int maxRequestSize, final int readTimeout) throws IOException {
+    Handler(final Socket socket, final Server server, final int maxRequestSize, final int readTimeout) {
         this.server = server;
         this.socket = socket;
         this.readTimeout = readTimeout;
@@ -179,14 +179,7 @@ public class Handler extends Thread {
 
     void response(final Response response) {
         if (response instanceof WebSocket) {
-            try {
-                new WSHandler(socket, (WebSocket) response).start();
-            } catch (IOException e) {
-                logger.error("Cant open websocket :: " + e.getMessage(), e);
-
-                response(Response.ServerError("Cant open websocket :: " + e.getMessage()));
-            }
-
+            ((WebSocket) response).spinOff(socket);
             return;
         }
 

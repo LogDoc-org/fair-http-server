@@ -1,7 +1,6 @@
 package org.logdoc.fairhttp.service.api.helpers.endpoint.invokers;
 
 import org.logdoc.fairhttp.service.DI;
-import org.logdoc.fairhttp.service.http.Http;
 import org.logdoc.fairhttp.service.http.Request;
 import org.logdoc.fairhttp.service.http.Response;
 
