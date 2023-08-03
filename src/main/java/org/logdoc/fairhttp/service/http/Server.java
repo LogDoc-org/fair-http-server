@@ -68,7 +68,7 @@ public class Server {
 
         port = config.getInt(ConfigPath.PORT);
         maxRequestBytes = config.getBytes(ConfigPath.MAX_REQUEST).intValue();
-        readTimeout = (int) config.getDuration(ConfigPath.READ_TIMEOUT).getSeconds() * 1000;
+        readTimeout = config.getInt(ConfigPath.READ_TIMEOUT);
 
         this.endpoints = new TreeSet<>();
 

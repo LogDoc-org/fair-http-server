@@ -41,7 +41,6 @@ public class Handler extends Thread {
         setDaemon(true);
     }
 
-
     @Override
     public void run() {
         int i = 0;
@@ -121,7 +120,7 @@ public class Handler extends Thread {
                 int read, sum = 0;
                 try {
                     do {
-                        read = i.read();
+                        read = i.read(buf);
                         if (read > 0) {
                             bos.write(buf, 0, read);
                             sum += read;
