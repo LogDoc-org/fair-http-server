@@ -12,7 +12,12 @@ import java.lang.reflect.Constructor;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Modifier;
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
 import java.util.function.Supplier;
+
+import static org.logdoc.helpers.Texts.makeEnding;
+import static org.logdoc.helpers.Texts.notNull;
 
 
 /**
@@ -21,18 +26,35 @@ import java.util.function.Supplier;
  * FairHttpService ☭ sweat and blood
  */
 public final class DI {
-    private static final Logger logger = LoggerFactory.getLogger(DI.class);
-
-    private static final Set<Class<? extends EagerSingleton>> eagers = new HashSet<>(8);
-    private static final Map<Class<?>, Class<?>> bindMap = new HashMap<>(64);
-    private static final Map<Integer, Supplier<?>> knownConstructors = new HashMap<>();
-    private static final Map<Integer, Object> singleMap = new HashMap<>();
+    private static final Logger logger = LoggerFactory.getLogger("FairServer");
+    private static final ConcurrentMap<String, DI> refMap = new ConcurrentHashMap<>(4);
     private static Config config;
 
-    static void init(final Config config0) {
+    private final Set<Class<? extends EagerSingleton>> eagers;
+    private final Map<Class<?>, Class<?>> bindMap;
+    private final Map<Integer, Supplier<?>> knownConstructors;
+    private final Map<Integer, Object> singleMap;
+
+    private DI() {
+        bindMap = new HashMap<>(64);
+        knownConstructors = new HashMap<>();
+        singleMap = new HashMap<>();
+        eagers = new HashSet<>(8);
+    }
+
+    synchronized static void init(final Config config0) {
         config = config0;
         logger.info("Initializing");
-        bindProvider(Config.class, () -> config);
+        refMap.putIfAbsent("", new DI());
+    }
+
+    private static DI ref(final String name) {
+        DI di = refMap.get(notNull(name));
+
+        if (di == null && name != null && !name.isEmpty())
+            di = refMap.get("");
+
+        return di;
     }
 
     static void preload(final Class<Preloaded> clas) {
@@ -49,7 +71,35 @@ public final class DI {
         }
     }
 
-    public static synchronized void initEagers() {
+    public static void initEagers() {
+        refMap.values().forEach(DI::initEagers0);
+    }
+
+    public static <A> void bindProvider(final Class<A> type, final Supplier<? extends A> provider) {
+        bindProvider(null, type, provider);
+    }
+
+    public static <A> void bindProvider(final String named, final Class<A> type, final Supplier<? extends A> provider) {
+        ref(named).bindProvider0(type, provider);
+    }
+
+    public static <A, B extends A> void bind(final Class<A> type, final Class<B> implementation) {
+        bind(null, type, implementation);
+    }
+
+    public static <A, B extends A> void bind(final String named, final Class<A> type, final Class<B> implementation) {
+        ref(named).bind0(type, implementation);
+    }
+
+    public static <A> A gain(final Class<A> clas) {
+        return gain(null, clas);
+    }
+
+    public static <A> A gain(final String named, final Class<A> clas) {
+        return ref(named).gainInternal(clas, Collections.emptyList());
+    }
+
+    private synchronized void initEagers0() {
         if (eagers.isEmpty())
             return;
 
@@ -65,7 +115,7 @@ public final class DI {
         eagers.clear();
     }
 
-    public static synchronized <A> void bindProvider(final Class<A> type, final Supplier<? extends A> provider) {
+    private synchronized <A> void bindProvider0(final Class<A> type, final Supplier<? extends A> provider) {
         if (type == null)
             throw new NullPointerException("Type is null");
 
@@ -76,7 +126,7 @@ public final class DI {
     }
 
     @SuppressWarnings("unchecked")
-    public static synchronized <A, B extends A> void bind(final Class<A> type, final Class<B> implementation) {
+    private synchronized <A, B extends A> void bind0(final Class<A> type, final Class<B> implementation) {
         if (type == null)
             throw new NullPointerException("Type is null");
 
@@ -92,14 +142,13 @@ public final class DI {
         logger.debug("Bound type '" + type.getName() + "' to implementation '" + implementation.getName() + "'");
     }
 
-    public static <A> A gain(final Class<A> clas) {
-        return gainInternal(clas, Collections.emptyList());
-    }
-
     @SuppressWarnings("unchecked")
-    private static <A> A gainInternal(final Class<A> clas, final Collection<Class<?>> ancestors) {
+    private <A> A gainInternal(final Class<A> clas, final Collection<Class<?>> ancestors) {
         if (clas == null)
             return null;
+
+        if (clas.equals(Config.class))
+            return (A) config;
 
         final Class<?> c = bindMap.get(clas);
         if (c != null) {
@@ -137,7 +186,7 @@ public final class DI {
     }
 
     @SuppressWarnings("unchecked")
-    private static <A> A build(final Class<A> clas, final int hash, final Collection<Class<?>> ancestors) {
+    private <A> A build(final Class<A> clas, final int hash, final Collection<Class<?>> ancestors) {
         Supplier<?> constructor;
         if ((constructor = knownConstructors.get(hash)) != null)
             return (A) constructor.get();
