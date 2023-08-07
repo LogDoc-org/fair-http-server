@@ -50,7 +50,6 @@ public class Response {
     public Response(final int code, final String message) {
         this.code = code;
         this.message = message;
-        setPayload(message.getBytes(StandardCharsets.UTF_8), MimeType.TEXTPLAIN);
     }
 
     public static Response jsonSuccess() {

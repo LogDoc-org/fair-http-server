@@ -2,6 +2,7 @@ package org.logdoc.fairhttp.service.tools;
 
 import org.logdoc.fairhttp.service.api.helpers.Headers;
 import org.logdoc.fairhttp.service.api.helpers.MimeType;
+import org.logdoc.helpers.gears.Pair;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 

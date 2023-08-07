@@ -6,6 +6,7 @@ import org.logdoc.fairhttp.service.api.helpers.MimeType;
 import org.logdoc.fairhttp.service.tools.*;
 import org.logdoc.fairhttp.service.tools.websocket.extension.IExtension;
 import org.logdoc.fairhttp.service.tools.websocket.protocol.IProtocol;
+import org.logdoc.helpers.gears.Pair;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
