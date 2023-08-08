@@ -109,7 +109,6 @@ public class Server {
                         new Handler(child, this, maxRequestBytes, readTimeout).start();
                 } while (child != null);
             } catch (final Exception e) {
-                e.printStackTrace();
                 logger.error(e.getMessage(), e);
                 System.exit(-1);
             }
@@ -141,8 +140,8 @@ public class Server {
             if (e.match(request.method(), request.path())) {
                 CompletableFuture.runAsync(() -> e.call(request)
                         .thenApply(rsp -> cors.wrap(request, rsp))
-                        .thenAccept(responseConsumer)
-                        .exceptionally(errorHandler));
+                        .thenAccept(responseConsumer))
+                        .exceptionally(errorHandler);
 
                 return;
             } else if (!hasMatchPath && e.pathMatch(request.path()))
