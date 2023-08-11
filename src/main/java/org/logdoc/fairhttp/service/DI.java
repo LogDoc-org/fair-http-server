@@ -16,8 +16,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.function.Supplier;
 
-import static org.logdoc.helpers.Texts.makeEnding;
-import static org.logdoc.helpers.Texts.notNull;
+import static org.logdoc.helpers.Texts.*;
 
 
 /**
@@ -57,6 +56,13 @@ public final class DI {
         return di;
     }
 
+    private static void initRef(final String name) {
+        if (isEmpty(name) || refMap.get(name) != null)
+            return;
+
+        refMap.put(name, new DI());
+    }
+
     static void preload(final Class<Preloaded> clas) {
         try {
             logger.info("Preloading '" + clas.getName() + "'");
@@ -80,6 +86,7 @@ public final class DI {
     }
 
     public static <A> void bindProvider(final String named, final Class<A> type, final Supplier<? extends A> provider) {
+        initRef(named);
         ref(named).bindProvider0(type, provider);
     }
 
@@ -88,6 +95,7 @@ public final class DI {
     }
 
     public static <A, B extends A> void bind(final String named, final Class<A> type, final Class<B> implementation) {
+        initRef(named);
         ref(named).bind0(type, implementation);
     }
 
@@ -139,7 +147,7 @@ public final class DI {
         if (!type.equals(implementation))
             bindMap.put(type, implementation);
 
-        logger.debug("Bound type '" + type.getName() + "' to implementation '" + implementation.getName() + "'");
+        logger.info("Bound type '" + type.getName() + "' to implementation '" + implementation.getName() + "'");
     }
 
     @SuppressWarnings("unchecked")
