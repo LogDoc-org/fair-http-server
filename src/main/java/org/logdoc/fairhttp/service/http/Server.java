@@ -200,4 +200,15 @@ public class Server {
         if (errorHandler != null)
             this.errorHandler = errorHandler;
     }
+
+    public Response errorAsResponse(final String error) {
+        return errorHandler.apply(new Throwable(error));
+    }
+
+    public Response errorAsResponse(final Throwable t) {
+        if (t == null)
+            return Response.ServerError();
+
+        return errorHandler.apply(t);
+    }
 }
