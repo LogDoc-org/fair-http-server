@@ -56,6 +56,13 @@ public class Server {
 
         assets = new NoStatics();
         cors = new CORS(null);
+
+        errorHandler = throwable -> {
+            if (throwable != null)
+                logger.error(throwable.getMessage(), throwable);
+
+            return throwable == null ? Response.ServerError() : Response.ServerError(throwable.getMessage());
+        };
     }
 
     public Server(final Config config) {
@@ -198,7 +205,9 @@ public class Server {
 
     public void setupErrorHandler(final Function<Throwable, Response> errorHandler) {
         if (errorHandler != null)
-            this.errorHandler = errorHandler;
+            synchronized (this) {
+                this.errorHandler = errorHandler;
+            }
     }
 
     public Response errorAsResponse(final String error) {
