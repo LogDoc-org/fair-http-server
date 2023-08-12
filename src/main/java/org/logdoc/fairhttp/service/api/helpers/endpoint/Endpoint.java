@@ -6,6 +6,7 @@ import org.logdoc.fairhttp.service.http.Response;
 
 import java.util.Map;
 import java.util.Objects;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 import java.util.function.BiFunction;
 
@@ -53,7 +54,11 @@ public class Endpoint implements Comparable<Endpoint> {
     }
 
     public CompletionStage<? extends Response> call(final Request request) {
-        return invoker.apply(request, signature.values(request.path()));
+        try {
+            return invoker.apply(request, signature.values(request.path()));
+        } catch (final Exception e) {
+            return CompletableFuture.failedStage(e);
+        }
     }
 
     @Override
