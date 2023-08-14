@@ -31,14 +31,14 @@ public class Response {
     private static final byte[] PROTO = "HTTP/1.1".getBytes(StandardCharsets.US_ASCII);
     protected final Map<String, String> headers;
     private final Set<Cookie> cookies;
-    private int code;
+    int code;
     private String message;
     private byte[] payload;
     private Consumer<OutputStream> promise;
 
     {
         headers = new HashMap<>(2);
-        headers.put("Server", "FairHttp/1.1.15");
+        headers.put("Server", "FairHttp/1.1.28");
         headers.put("Connection", "keep-alive");
 
         cookies = new HashSet<>(2);
@@ -122,6 +122,9 @@ public class Response {
             os.write(PROTO);
             os.write((" " + code + (isEmpty(message) ? "" : " " + message)).getBytes(StandardCharsets.US_ASCII));
             os.write(FEED);
+
+            if (isEmpty(payload) && promise == null && !(this instanceof WebSocket))
+                header(Headers.ContentLength, 0);
 
             header("Date", LocalDateTime.now().atOffset(ZoneOffset.UTC).format(DateTimeFormatter.RFC_1123_DATE_TIME));
 

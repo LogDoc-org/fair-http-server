@@ -190,7 +190,7 @@ abstract class StaticRead implements Function<String, Response> {
     }
 
     protected Response pickCached(final String id) {
-        return cachedMap.get(id);
+        return cache ? cachedMap.get(id) : null;
     }
 
     protected static class FRes implements Comparable<FRes> {

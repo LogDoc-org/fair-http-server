@@ -35,7 +35,7 @@ public class StartFairServer {
         final Config c = ConfigFactory.defaultApplication().withFallback(ConfigFactory.defaultReference()).resolve();
         DI.init(c);
 
-        final List<String> endpoints = new ArrayList<>(16);
+        byte[] endpoints = null;
         try (final InputStream is = StartFairServer.class.getClassLoader().getResourceAsStream("routes"); final ByteArrayOutputStream os = new ByteArrayOutputStream(64 * 1024)) {
             if (is != null) {
                 final byte[] buf = new byte[1024 * 640];
@@ -45,7 +45,7 @@ public class StartFairServer {
                     os.write(buf, 0, read);
 
                 os.flush();
-                endpoints.addAll(Arrays.stream(os.toString(StandardCharsets.UTF_8).split("\\n")).collect(Collectors.toList()));
+                endpoints = os.toByteArray();
             }
         } catch (final Exception e) {
             logger.atDebug().log("Cant load routes config: " + e.getMessage(), e);
@@ -53,7 +53,6 @@ public class StartFairServer {
 
         final Server s = new Server(c);
         DI.bindProvider(Server.class, () -> s);
-        s.setupConfigEndpoints(endpoints);
 
         final Logger errorLogger = LoggerFactory.getLogger(ErrorHandler.class);
 
@@ -74,6 +73,7 @@ public class StartFairServer {
                 logger.warn("Cant setup custom error handler: " + e.getMessage());
             }
 
+        s.setupConfigEndpoints(endpoints);
         s.start();
 
         if (c.hasPath("fair.preload.load"))

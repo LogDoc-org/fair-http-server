@@ -3,11 +3,14 @@ package org.logdoc.fairhttp.service.http;
 import com.typesafe.config.Config;
 import org.logdoc.fairhttp.service.api.helpers.DynamicRoute;
 import org.logdoc.fairhttp.service.api.helpers.endpoint.Endpoint;
+import org.logdoc.fairhttp.service.api.helpers.endpoint.Signature;
+import org.logdoc.fairhttp.service.api.helpers.endpoint.invokers.*;
 import org.logdoc.fairhttp.service.http.statics.BundledRead;
 import org.logdoc.fairhttp.service.http.statics.DirectRead;
 import org.logdoc.fairhttp.service.http.statics.NoStatics;
 import org.logdoc.fairhttp.service.tools.ConfigPath;
 import org.logdoc.fairhttp.service.tools.ConfigTools;
+import org.logdoc.helpers.gears.Pair;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -17,17 +20,15 @@ import java.net.Socket;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.util.Collection;
-import java.util.Map;
-import java.util.SortedSet;
-import java.util.TreeSet;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.CompletionStage;
+import java.util.*;
+import java.util.concurrent.*;
 import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import java.util.function.Function;
+import java.util.stream.Collectors;
 
 import static org.logdoc.fairhttp.service.http.statics.BundledRead.PlaceHolder;
+import static org.logdoc.helpers.Digits.getInt;
 import static org.logdoc.helpers.Texts.isEmpty;
 import static org.logdoc.helpers.Texts.notNull;
 
@@ -39,20 +40,22 @@ import static org.logdoc.helpers.Texts.notNull;
 public class Server {
     private static final Logger logger = LoggerFactory.getLogger(Server.class);
     private static Server backRef = null;
-
     private final SortedSet<Endpoint> endpoints;
     private final int port, maxRequestBytes;
-    private final int readTimeout;
+    private final int readTimeout, execTimeout;
     private final Function<String, Response> assets;
     private final CORS cors;
-
+    private final BiFunction<Response, Consumer<Response>, String> remapper;
+    private final Map<Integer, String> maps;
     private Function<Throwable, Response> errorHandler;
 
     public Server(final int port, final int maxRequestBytes) { // minimal
         this.port = port;
         this.maxRequestBytes = maxRequestBytes;
         this.readTimeout = 15000;
+        this.execTimeout = 180;
         this.endpoints = new TreeSet<>();
+        maps = new HashMap<>(0);
 
         assets = new NoStatics();
         cors = new CORS(null);
@@ -62,6 +65,11 @@ public class Server {
                 logger.error(throwable.getMessage(), throwable);
 
             return throwable == null ? Response.ServerError() : Response.ServerError(throwable.getMessage());
+        };
+
+        remapper = (response, responseConsumer) -> {
+            responseConsumer.accept(response);
+            return null;
         };
     }
 
@@ -76,6 +84,8 @@ public class Server {
         port = config.getInt(ConfigPath.PORT);
         maxRequestBytes = config.getBytes(ConfigPath.MAX_REQUEST).intValue();
         readTimeout = config.getInt(ConfigPath.READ_TIMEOUT);
+        execTimeout = config.getInt(ConfigPath.EXEC_TIMEOUT);
+        maps = new HashMap<>(0);
 
         this.endpoints = new TreeSet<>();
 
@@ -100,6 +110,57 @@ public class Server {
             assets0 = new NoStatics();
         }
 
+        BiFunction<Response, Consumer<Response>, String> rem = (response, responseConsumer) -> {
+            responseConsumer.accept(response);
+            return null;
+        };
+
+        if (staticsCfg != null)
+            try {
+                staticsCfg.root().unwrapped()
+                        .forEach((s, o) -> {
+                            if (s.startsWith("map") && s.endsWith("_to") && !isEmpty(staticsCfg.getString(s)))
+                                maps.put(config.getInt(s), notNull(staticsCfg.getString(s)));
+                        });
+
+                maps.remove(0);
+
+                if (!maps.isEmpty()) {
+                    final Set<Integer> codes = maps.keySet();
+
+                    for (final int code : codes) {
+                        final int l = String.valueOf(code).length();
+
+                        if (l > 3)
+                            maps.remove(code);
+                        else if (l < 3) {
+                            final String mapping = maps.remove(code);
+
+                            final int from = getInt(code + "0".repeat(l == 2 ? 1 : 2));
+                            final int untill = l == 1 ? 100 : 10;
+
+                            for (int i = from; i < untill; i++)
+                                maps.put(i, mapping);
+                        }
+                    }
+
+                    if (!maps.isEmpty())
+                        rem = (response, responseConsumer) -> {
+                            final String m = maps.get(response.code);
+
+                            if (m == null) {
+                                responseConsumer.accept(response);
+                                return null;
+                            }
+
+                            return m;
+                        };
+                }
+            } catch (final Exception e) {
+                logger.error("Cant setup code mappings: " + e.getMessage(), e);
+            }
+
+        remapper = rem;
         assets = assets0;
 
         cors = new CORS(config);
@@ -127,6 +188,7 @@ public class Server {
                 super.start();
             }
         }.start();
+
         try {
             logger.info("Listen at:\thttp://" + Inet4Address.getLocalHost().getHostAddress() + ":" + port);
         } catch (final Exception e) {
@@ -135,58 +197,103 @@ public class Server {
     }
 
     void handleRequest(final Request request, final Consumer<Response> responseConsumer) {
-        boolean hasMatchPath = false;
+        handleRequest0(request, responseConsumer, !maps.isEmpty());
+    }
 
-        final Function<Throwable, Void> errorHandler = t -> {
-            responseConsumer.accept(Server.this.errorHandler.apply(t));
+    private void handleRequest0(final Request request, final Consumer<Response> responseConsumer, final boolean unmapped) {
+        Response mappableResponse = null;
 
-            return null;
-        };
+        try {
+            for (final Endpoint e : endpoints) {
+                final Pair<Boolean, Boolean> ms = e.match(request.method(), request.path());
 
-        for (final Endpoint e : endpoints)
-            if (e.match(request.method(), request.path())) {
-                CompletableFuture.runAsync(() -> e.call(request)
-                        .thenApply(rsp -> cors.wrap(request, rsp))
-                        .thenAccept(responseConsumer))
-                        .exceptionally(errorHandler);
-
+                if (ms.first && ms.second) {
+                    mappableResponse = e.call(request);
+                    break;
+                } else if (ms.second && request.method().equals("OPTIONS")) {
+                    responseConsumer.accept(cors.wrap(request, Response.NoContent()));
+                    return;
+                }
+            }
+        } catch (final ConcurrentModificationException cme) {
+            synchronized (endpoints) { // someone added/removed endpoint, just try to repeat op over fixed endpoints // todo refactor it
+                handleRequest0(request, responseConsumer, unmapped);
                 return;
-            } else if (!hasMatchPath && e.pathMatch(request.path()))
-                hasMatchPath = true;
-
-        if (hasMatchPath && request.method().equals("OPTIONS")) {
-            responseConsumer.accept(cors.wrap(request, Response.NoContent()));
-            return;
+            }
         }
 
-        if (request.method().equals("GET"))
-            CompletableFuture.runAsync(() -> responseConsumer.accept(assets.apply(request.uri()))).exceptionally(errorHandler);
+        if (mappableResponse != null && unmapped)
+            doUnmapped(request, mappableResponse, responseConsumer);
+        else if (request.method().equals("GET"))
+            try {
+                CompletableFuture.runAsync(() -> {
+                            final Response um = assets.apply(request.uri());
+
+                            if (unmapped)
+                                doUnmapped(request, um, responseConsumer);
+                            else
+                                responseConsumer.accept(um);
+                        })
+                        .exceptionally(e -> {
+                            if (e instanceof RuntimeException)
+                                throw (RuntimeException) e;
+
+                            throw new RuntimeException(e);
+                        });
+            } catch (final Exception e) {
+                logger.error("Error handling static request: " + e.getMessage(), e);
+                mappableResponse = errorHandler.apply(e);
+            }
         else
-            responseConsumer.accept(Response.NotFound());
+            mappableResponse = Response.NotFound();
+
+        if (unmapped)
+            doUnmapped(request, mappableResponse, responseConsumer);
+        else
+            responseConsumer.accept(mappableResponse);
     }
 
-    public synchronized void setupDynamicEndpoints(final Collection<DynamicRoute> routes) {
-        Endpoint ep;
-        for (final DynamicRoute pretend : routes)
-            try {
-                endpoints.add((ep = new Endpoint(pretend.method, pretend.endpoint, pretend.callback)));
-                logger.info("Added endpoint: " + ep);
-            } catch (final Exception e) {
-                logger.error("Cant add endpoint '" + pretend + "' :: " + e.getMessage(), e);
-            }
+    private void doUnmapped(final Request request, final Response response, final Consumer<Response> responseConsumer) {
+        final String remap = remapper.apply(response, responseConsumer);
 
+        if (remap == null)
+            return;
+
+        request.remap(remap);
+
+        handleRequest0(request, responseConsumer, false);
     }
 
-    public synchronized void setupConfigEndpoints(final Collection<String> raw) {
-        Endpoint ep;
-        for (final String pretend : raw)
-            try {
-                endpoints.add((ep = new Endpoint(pretend)));
-                logger.info("Added endpoint: " + ep);
-            } catch (final ArrayIndexOutOfBoundsException ignore) {
-            } catch (final Exception e) {
-                logger.error("Cant add endpoint '" + pretend + "' :: " + e.getMessage(), e);
-            }
+    public void addEndpoints(final Collection<DynamicRoute> endpoints) {
+        for (final DynamicRoute pretend : endpoints)
+            addEndpoint(pretend);
+    }
+
+    public synchronized void setupConfigEndpoints(final byte[] raw) {
+        if (raw == null || raw.length == 0)
+            return;
+
+        EndpointResolver.resolve(raw)
+                .forEach(argued -> {
+                    final boolean unresolving = isEmpty(argued.args);
+                    final boolean direct = Response.class.isAssignableFrom(argued.invMethod.getReturnType());
+
+                    final ARequestInvoker invoker;
+
+                    if (unresolving) {
+                        invoker = direct
+                                ? new DirectUnresolvingInvoker(argued.invMethod, errorHandler, execTimeout)
+                                : new IndirectUnresolvingInvoker(argued.invMethod, errorHandler, execTimeout);
+                    } else {
+                        invoker = direct
+                                ? new DirectInvoker(argued.invMethod, Collections.unmodifiableList(argued.args.stream().map(arg -> arg.magic).collect(Collectors.toList())), errorHandler, execTimeout)
+                                : new IndirectInvoker(argued.invMethod, Collections.unmodifiableList(argued.args.stream().map(arg -> arg.magic).collect(Collectors.toList())), errorHandler, execTimeout);
+                    }
+
+                    final Endpoint ep = new Endpoint(argued.method, new Signature(argued.path), invoker);
+                    if (endpoints.add(ep))
+                        logger.info("Added endpoint: " + ep);
+                });
     }
 
     public synchronized boolean removeEndpoint(final String method, final String signature) {
@@ -199,8 +306,51 @@ public class Server {
         return false;
     }
 
-    public synchronized boolean addEndpoint(final String method, final String endpoint, final BiFunction<Request, Map<String, String>, CompletionStage<Response>> callback) {
-        return endpoints.add(new Endpoint(method, endpoint, callback));
+    @SuppressWarnings({"unchecked", "UnusedReturnValue"})
+    public synchronized boolean addEndpoint(final DynamicRoute endpoint) {
+        Endpoint ep;
+
+        if (endpoints.add((ep = new Endpoint(endpoint.method, new Signature(endpoint.endpoint),
+                endpoint.indirect
+                        ? (req, pathMap) -> {
+                    try {
+                        return CompletableFuture.supplyAsync(() -> {
+                                    try {
+                                        return ((CompletionStage<Response>) endpoint.callback.apply(req, pathMap)).toCompletableFuture().get(execTimeout, TimeUnit.SECONDS);
+                                    } catch (final InterruptedException | ExecutionException | TimeoutException e) {
+                                        throw new RuntimeException(e);
+                                    }
+                                })
+                                .exceptionally(e -> {
+                                    if (e instanceof RuntimeException)
+                                        throw (RuntimeException) e;
+
+                                    throw new RuntimeException(e);
+                                })
+                                .get(execTimeout, TimeUnit.SECONDS);
+                    } catch (final Exception ex) {
+                        return errorHandler.apply(ex);
+                    }
+                }
+                        : (req, pathMap) -> {
+                    try {
+                        return CompletableFuture.supplyAsync(() -> ((Response) endpoint.callback.apply(req, pathMap)))
+                                .exceptionally(e -> {
+                                    if (e instanceof RuntimeException)
+                                        throw (RuntimeException) e;
+
+                                    throw new RuntimeException(e);
+                                })
+                                .get(execTimeout, TimeUnit.SECONDS);
+                    } catch (final Exception ex) {
+                        return errorHandler.apply(ex);
+                    }
+                })))) {
+            logger.info("Added endpoint: " + ep);
+
+            return true;
+        } else
+            return false;
     }
 
     public void setupErrorHandler(final Function<Throwable, Response> errorHandler) {

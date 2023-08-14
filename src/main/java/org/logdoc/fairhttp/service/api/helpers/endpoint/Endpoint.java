@@ -1,16 +1,12 @@
 package org.logdoc.fairhttp.service.api.helpers.endpoint;
 
-import org.logdoc.fairhttp.service.api.helpers.endpoint.invokers.RequestInvoker;
 import org.logdoc.fairhttp.service.http.Request;
 import org.logdoc.fairhttp.service.http.Response;
+import org.logdoc.helpers.gears.Pair;
 
 import java.util.Map;
 import java.util.Objects;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.CompletionStage;
 import java.util.function.BiFunction;
-
-import static org.logdoc.helpers.Texts.notNull;
 
 /**
  * @author Denis Danilin | me@loslobos.ru
@@ -20,45 +16,20 @@ import static org.logdoc.helpers.Texts.notNull;
 public class Endpoint implements Comparable<Endpoint> {
     private final String method;
     private final Signature signature;
-    private final RequestInvoker invoker;
+    private final BiFunction<Request, Map<String, String>, Response> invoker;
 
-    public Endpoint(final String method, final String endpoint, final BiFunction<Request, Map<String, String>, CompletionStage<Response>> callback) {
-        this.method = notNull(method).trim().toUpperCase();
-        signature = new Signature(endpoint);
-        invoker = callback::apply;
+    public Endpoint(final String method, final Signature signature, final BiFunction<Request, Map<String, String>, Response> invoker) {
+        this.method = method;
+        this.signature = signature;
+        this.invoker = invoker;
     }
 
-    public Endpoint(String line) throws NoSuchMethodException {
-        int idx;
-
-        if ((idx = line.indexOf('#')) != -1 || (idx = line.indexOf("//")) != -1)
-            line = line.substring(0, idx).trim();
-
-        if (line.trim().isEmpty())
-            throw new ArrayIndexOutOfBoundsException();
-
-        final String[] pretend = line.split("\\s+", 3);
-
-        if (pretend.length != 3)
-            throw new ArrayIndexOutOfBoundsException();
-
-        method = pretend[0].toUpperCase();
-        signature = new Signature(pretend[1]);
-        invoker = InvokerFactory.build(pretend[2]);
-        if (invoker == null)
-            throw new NoSuchMethodException("Cant build endpoint handler");
+    public Pair<Boolean, Boolean> match(final String method, final String hardPath) {
+        return Pair.create(this.method.equals(method), signature.matches(hardPath));
     }
 
-    public boolean match(final String method, final String hardPath) {
-        return this.method.equals(method) && signature.matches(hardPath);
-    }
-
-    public CompletionStage<? extends Response> call(final Request request) {
-        try {
-            return invoker.apply(request, signature.values(request.path()));
-        } catch (final Exception e) {
-            return CompletableFuture.failedStage(e);
-        }
+    public Response call(final Request request) {
+        return invoker.apply(request, signature.values(request.path()));
     }
 
     @Override

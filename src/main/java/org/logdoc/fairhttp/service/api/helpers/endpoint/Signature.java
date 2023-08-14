@@ -9,7 +9,7 @@ import java.util.regex.Pattern;
  * 26.02.2023 13:51
  * FairHttpService ☭ sweat and blood
  */
-class Signature implements Comparable<Signature> {
+public class Signature implements Comparable<Signature> {
     private static final Pattern placeHold = Pattern.compile("/:([^/]+)");
 
     private final int weight;
@@ -17,7 +17,7 @@ class Signature implements Comparable<Signature> {
     private final Pattern pattern;
     private final List<String> names;
 
-    Signature(final String raw) {
+    public Signature(final String raw) {
         final String proper = raw.trim().replaceAll("/{2,}", "/");
 
         Matcher phm = placeHold.matcher(proper);

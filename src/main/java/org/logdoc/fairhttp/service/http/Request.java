@@ -7,6 +7,9 @@ import org.logdoc.fairhttp.service.tools.*;
 import org.logdoc.fairhttp.service.tools.websocket.extension.IExtension;
 import org.logdoc.fairhttp.service.tools.websocket.protocol.IProtocol;
 import org.logdoc.helpers.gears.Pair;
+import org.slf4j.ILoggerFactory;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -34,6 +37,8 @@ import static org.logdoc.helpers.Texts.notNull;
  * fair-http-server ☭ sweat and blood
  */
 public class Request {
+    private static final Logger logger = LoggerFactory.getLogger(Request.class);
+
     private final byte[] rawHead;
     private final Function<Request, byte[]> bodySupplier;
     private final SocketAddress remote;
@@ -129,25 +134,35 @@ public class Request {
         return headersMap().get(notNull(name).toUpperCase(Locale.ROOT));
     }
 
+    void remap(final String remapping) {
+        u = remapping;
+
+        ofPath();
+    }
+
+    private void ofPath() {
+        if (u.indexOf('?') == -1) {
+            p = u;
+            q = Collections.emptyMap();
+        } else {
+            p = u.substring(0, u.indexOf('?'));
+
+            final Map<String, String> qm = new HashMap<>(4);
+            Arrays.stream(u.substring(u.indexOf('?') + 1).split(Pattern.quote("&")))
+                    .map(pair -> pair.split(Pattern.quote("=")))
+                    .forEach(kv -> qm.put(kv[0], URLDecoder.decode(kv[1], StandardCharsets.UTF_8)));
+
+            q = Collections.unmodifiableMap(qm);
+        }
+    }
+
     private synchronized void makeFirstLine() {
         synchronized (this) {
             final String[] parts = heads()[0].split("\\s", 3);
-            m = parts[0];
-            u = parts[1];
+            m = notNull(parts[0]).toUpperCase();
+            u = notNull(parts[1]);
 
-            if (u.indexOf('?') == -1) {
-                p = u;
-                q = Collections.emptyMap();
-            } else {
-                p = u.substring(0, u.indexOf('?'));
-
-                final Map<String, String> qm = new HashMap<>(4);
-                Arrays.stream(u.substring(u.indexOf('?') + 1).split(Pattern.quote("&")))
-                        .map(pair -> pair.split(Pattern.quote("=")))
-                        .forEach(kv -> qm.put(kv[0], URLDecoder.decode(kv[1], StandardCharsets.UTF_8)));
-
-                q = Collections.unmodifiableMap(qm);
-            }
+            ofPath();
         }
     }
 
@@ -242,7 +257,7 @@ public class Request {
             return Json.fromJson(asJson(), klass);
         }
 
-        public MultiForm asMultipart() throws IOException {
+        public MultiForm asMultipart() {
             if (m == null && data != null && data.length > 0 && contentTypeMatch(MimeType.MULTIPART))
                 synchronized (this) {
                     m = new MultiForm();
@@ -313,11 +328,28 @@ public class Request {
                                 else
                                     m.binData(fieldName, tempo.toByteArray(), partHeaders);
                             }
+                        } catch (final Exception e) {
+                            logger.error(e.getMessage(), e);
                         }
                     }
                 }
 
             return m;
+        }
+
+        public String formField(final String name) {
+            if (isEmpty(name) || data == null || data.length == 0 || (!contentTypeMatch(MimeType.FORM) && !contentTypeMatch(MimeType.MULTIPART)))
+                return null;
+
+            if (contentTypeMatch(MimeType.FORM)) {
+                asForm();
+
+                return f == null ? null : f.field(name);
+            }
+
+            asMultipart();
+
+            return m == null ? null : m.field(name);
         }
 
         public Form asForm() {
