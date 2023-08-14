@@ -81,6 +81,23 @@ public final class DI {
         refMap.values().forEach(DI::initEagers0);
     }
 
+    public static void unbind(final Class<?> type) {
+        unbind(null, type);
+    }
+
+    public static void unbind(final String named, final Class<?> type) {
+        if (type == null)
+            return;
+
+        ref(named).unbind0(type);
+    }
+
+    private synchronized void unbind0(final Class<?> type) {
+        bindMap.remove(type);
+        knownConstructors.remove(type.hashCode());
+        singleMap.remove(type.hashCode());
+    }
+
     public static <A> void bindProvider(final Class<A> type, final Supplier<? extends A> provider) {
         bindProvider(null, type, provider);
     }

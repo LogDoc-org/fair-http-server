@@ -3,6 +3,7 @@ package org.logdoc.fairhttp.service.http;
 import org.logdoc.fairhttp.service.api.helpers.Headers;
 import org.logdoc.fairhttp.service.api.helpers.MimeType;
 import org.logdoc.fairhttp.service.tools.Json;
+import org.logdoc.fairhttp.service.tools.PhasedConsumer;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -27,7 +28,7 @@ import static org.logdoc.helpers.Texts.notNull;
  * fair-http-server ☭ sweat and blood
  */
 public class Response {
-    private static final byte[] FEED = new byte[]{'\r', '\n'};
+    public static final byte[] FEED = new byte[]{'\r', '\n'};
     private static final byte[] PROTO = "HTTP/1.1".getBytes(StandardCharsets.US_ASCII);
     protected final Map<String, String> headers;
     private final Set<Cookie> cookies;
@@ -70,6 +71,10 @@ public class Response {
 
     public static Response NotFound() {
         return new Response(404, "Not found");
+    }
+
+    public static Response NotFound(final String message) {
+        return new Response(404, message);
     }
 
     public static Response Forbidden() {
@@ -123,6 +128,9 @@ public class Response {
             os.write((" " + code + (isEmpty(message) ? "" : " " + message)).getBytes(StandardCharsets.US_ASCII));
             os.write(FEED);
 
+            if (promise != null && PhasedConsumer.class.isAssignableFrom(promise.getClass()))
+                ((PhasedConsumer<OutputStream>) promise).warmUp(os);
+
             if (isEmpty(payload) && promise == null && !(this instanceof WebSocket))
                 header(Headers.ContentLength, 0);
 
@@ -175,5 +183,9 @@ public class Response {
 
     public int size() {
         return payload == null ? -1 : payload.length;
+    }
+
+    public boolean is200() {
+        return code == 200;
     }
 }

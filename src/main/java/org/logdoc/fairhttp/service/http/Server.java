@@ -45,7 +45,6 @@ public class Server {
     private final int readTimeout, execTimeout;
     private final Function<String, Response> assets;
     private final CORS cors;
-    private final BiFunction<Response, Consumer<Response>, String> remapper;
     private final Map<Integer, String> maps;
     private Function<Throwable, Response> errorHandler;
 
@@ -65,11 +64,6 @@ public class Server {
                 logger.error(throwable.getMessage(), throwable);
 
             return throwable == null ? Response.ServerError() : Response.ServerError(throwable.getMessage());
-        };
-
-        remapper = (response, responseConsumer) -> {
-            responseConsumer.accept(response);
-            return null;
         };
     }
 
@@ -110,17 +104,12 @@ public class Server {
             assets0 = new NoStatics();
         }
 
-        BiFunction<Response, Consumer<Response>, String> rem = (response, responseConsumer) -> {
-            responseConsumer.accept(response);
-            return null;
-        };
-
-        if (staticsCfg != null)
+        if (config.hasPath("fair.http"))
             try {
-                staticsCfg.root().unwrapped()
+                config.getConfig("fair.http").root().unwrapped()
                         .forEach((s, o) -> {
-                            if (s.startsWith("map") && s.endsWith("_to") && !isEmpty(staticsCfg.getString(s)))
-                                maps.put(config.getInt(s), notNull(staticsCfg.getString(s)));
+                            if (s.startsWith("map") && s.endsWith("_to") && !isEmpty(o))
+                                maps.put(getInt(s), notNull(o));
                         });
 
                 maps.remove(0);
@@ -143,24 +132,11 @@ public class Server {
                                 maps.put(i, mapping);
                         }
                     }
-
-                    if (!maps.isEmpty())
-                        rem = (response, responseConsumer) -> {
-                            final String m = maps.get(response.code);
-
-                            if (m == null) {
-                                responseConsumer.accept(response);
-                                return null;
-                            }
-
-                            return m;
-                        };
                 }
             } catch (final Exception e) {
                 logger.error("Cant setup code mappings: " + e.getMessage(), e);
             }
 
-        remapper = rem;
         assets = assets0;
 
         cors = new CORS(config);
@@ -200,7 +176,7 @@ public class Server {
         handleRequest0(request, responseConsumer, !maps.isEmpty());
     }
 
-    private void handleRequest0(final Request request, final Consumer<Response> responseConsumer, final boolean unmapped) {
+    private void handleRequest0(final Request request, final Consumer<Response> responseConsumer, final boolean mayBeMapped) {
         Response mappableResponse = null;
 
         try {
@@ -217,51 +193,25 @@ public class Server {
             }
         } catch (final ConcurrentModificationException cme) {
             synchronized (endpoints) { // someone added/removed endpoint, just try to repeat op over fixed endpoints // todo refactor it
-                handleRequest0(request, responseConsumer, unmapped);
+                handleRequest0(request, responseConsumer, mayBeMapped);
                 return;
             }
         }
 
-        if (mappableResponse != null && unmapped)
-            doUnmapped(request, mappableResponse, responseConsumer);
-        else if (request.method().equals("GET"))
-            try {
-                CompletableFuture.runAsync(() -> {
-                            final Response um = assets.apply(request.uri());
+        if (mappableResponse == null) {
+            if (request.method().equals("GET"))
+                mappableResponse = assets.apply(request.uri());
 
-                            if (unmapped)
-                                doUnmapped(request, um, responseConsumer);
-                            else
-                                responseConsumer.accept(um);
-                        })
-                        .exceptionally(e -> {
-                            if (e instanceof RuntimeException)
-                                throw (RuntimeException) e;
+            if (mappableResponse == null)
+                mappableResponse = Response.NotFound();
+        }
 
-                            throw new RuntimeException(e);
-                        });
-            } catch (final Exception e) {
-                logger.error("Error handling static request: " + e.getMessage(), e);
-                mappableResponse = errorHandler.apply(e);
-            }
-        else
-            mappableResponse = Response.NotFound();
-
-        if (unmapped)
-            doUnmapped(request, mappableResponse, responseConsumer);
-        else
-            responseConsumer.accept(mappableResponse);
-    }
-
-    private void doUnmapped(final Request request, final Response response, final Consumer<Response> responseConsumer) {
-        final String remap = remapper.apply(response, responseConsumer);
-
-        if (remap == null)
+        if (mayBeMapped && maps.containsKey(mappableResponse.code)) {
+            handleRequest0(request.remap(maps.get(mappableResponse.code)), responseConsumer, false);
             return;
+        }
 
-        request.remap(remap);
-
-        handleRequest0(request, responseConsumer, false);
+        responseConsumer.accept(mappableResponse);
     }
 
     public void addEndpoints(final Collection<DynamicRoute> endpoints) {

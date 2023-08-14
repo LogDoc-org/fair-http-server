@@ -134,10 +134,12 @@ public class Request {
         return headersMap().get(notNull(name).toUpperCase(Locale.ROOT));
     }
 
-    void remap(final String remapping) {
+    Request remap(final String remapping) {
         u = remapping;
 
         ofPath();
+
+        return this;
     }
 
     private void ofPath() {

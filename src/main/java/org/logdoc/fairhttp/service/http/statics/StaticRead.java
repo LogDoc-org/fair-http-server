@@ -2,8 +2,10 @@ package org.logdoc.fairhttp.service.http.statics;
 
 import com.typesafe.config.Config;
 import com.typesafe.config.ConfigException;
+import org.logdoc.fairhttp.service.DI;
 import org.logdoc.fairhttp.service.api.helpers.MimeType;
 import org.logdoc.fairhttp.service.http.Response;
+import org.logdoc.helpers.Sporadics;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -30,7 +32,7 @@ import static org.logdoc.helpers.Texts.isEmpty;
 abstract class StaticRead implements Function<String, Response> {
     protected final static Logger logger = LoggerFactory.getLogger(StaticRead.class);
     private static final DateTimeFormatter format = DateTimeFormatter.ofPattern("dd-MM-yyyy HH:mm");
-    private final static String autoIdxPrm = "auto_index", indexesPrm = "index_files", map404To = "map404_to", cachePrm = "memory_cache", mimesPrm = "mime_types",
+    private final static String autoIdxPrm = "auto_index", indexesPrm = "index_files", cachePrm = "memory_cache", mimesPrm = "mime_types",
             cacheEnblPrm = "enabled", cacheSizePrm = "max_file_size", cacheLifePrm = "lifetime",
             mimeMimePrm = "mime", mimeExtPrm = "ext";
 
@@ -38,15 +40,16 @@ abstract class StaticRead implements Function<String, Response> {
     protected final Set<String> indexFile;
     protected final boolean cache;
     protected final long maxCacheSize, maxCacheLife;
-    protected final String map404Path;
 
     private final ConcurrentMap<String, String> mimes;
     private final ConcurrentMap<String, Response> cachedMap;
     private final ConcurrentMap<String, ScheduledFuture<?>> futuresMap;
 
-    private final Executor cacheCleanTP;
+    protected final String namedRef;
 
     protected StaticRead(final Config staticCfg) {
+        namedRef = Sporadics.generateUuid().toString();
+
         try {
             indexFile = new HashSet<>(3);
             mimes = new ConcurrentHashMap<>(8);
@@ -66,8 +69,6 @@ abstract class StaticRead implements Function<String, Response> {
                 logger.info("Index files defined names: " + indexFile);
             else
                 logger.info("No index files defined.");
-
-            map404Path = sureNN(staticCfg, map404To) ? staticCfg.getString(map404To) : null;
 
             final Config cacheCfg = sureConf(staticCfg, cachePrm);
 
@@ -92,13 +93,13 @@ abstract class StaticRead implements Function<String, Response> {
             maxCacheLife = cl;
 
             if (cache) {
-                cacheCleanTP = Executors.newScheduledThreadPool(Math.min(6, Math.max(2, Runtime.getRuntime().availableProcessors() / 2)));
+                final ScheduledExecutorService ses = Executors.newScheduledThreadPool(Math.min(6, Math.max(2, Runtime.getRuntime().availableProcessors() / 2)));
+                DI.bindProvider(namedRef, ScheduledExecutorService.class, () -> ses);
                 cachedMap = new ConcurrentHashMap<>(64);
                 futuresMap = new ConcurrentHashMap<>(64);
 
                 logger.info("Static caching is enabled for files smaller or equal to " + maxCacheSize + " bytes for a period of " + Duration.of(maxCacheLife, ChronoUnit.MILLIS).toSeconds() + " seconds.");
             } else {
-                cacheCleanTP = null;
                 cachedMap = null;
                 futuresMap = null;
 
@@ -134,15 +135,6 @@ abstract class StaticRead implements Function<String, Response> {
         }
     }
 
-    protected Response map404(final String path) {
-        if (map404Path == null || path.equals(map404Path)) {
-            logger.info("Not found `"+path+"`");
-            return Response.NotFound();
-        }
-
-        return apply(map404Path);
-    }
-
     protected byte[] dirList(final String dirName, final Collection<FRes> content) {
         final StringBuilder html = new StringBuilder("<html><head><title>Index of " + dirName + "</title></head><body><h1>Index of " + dirName + "</h1><hr><pre><a href=\"../\">../</a>\n");
 
@@ -171,7 +163,7 @@ abstract class StaticRead implements Function<String, Response> {
             } catch (final Exception ignore) {
             }
         cachedMap.put(id, response);
-        futuresMap.put(id, ((ScheduledExecutorService) cacheCleanTP).schedule(() -> cachedMap.remove(id), maxCacheLife, TimeUnit.MILLISECONDS));
+        futuresMap.put(id, DI.gain(namedRef, ScheduledExecutorService.class).schedule(() -> cachedMap.remove(id), maxCacheLife, TimeUnit.MILLISECONDS));
     }
 
     protected String getMime(final String ext) {

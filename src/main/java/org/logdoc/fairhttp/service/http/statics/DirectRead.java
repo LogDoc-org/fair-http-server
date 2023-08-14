@@ -5,12 +5,15 @@ import com.typesafe.config.ConfigException;
 import org.logdoc.fairhttp.service.api.helpers.Headers;
 import org.logdoc.fairhttp.service.api.helpers.MimeType;
 import org.logdoc.fairhttp.service.http.Response;
+import org.logdoc.fairhttp.service.tools.PhasedConsumer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.OutputStream;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -19,6 +22,8 @@ import java.time.ZoneId;
 import java.util.Objects;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
+
+import static org.logdoc.fairhttp.service.http.Response.FEED;
 
 /**
  * @author Denis Danilin | me@loslobos.ru
@@ -76,7 +81,7 @@ public class DirectRead extends StaticRead {
         final Path p = root.resolve(webpath);
 
         if (!Files.exists(p))
-            return map404(webpath);
+            return Response.NotFound();
 
         Response response = pickCached(webpath);
 
@@ -86,32 +91,56 @@ public class DirectRead extends StaticRead {
 
             if (Files.isDirectory(p)) {
                 if (gotIndex) {
+                    Path subid;
                     for (final String idx : indexFile)
-                        if (Files.exists(p.resolve(idx)) && !Files.isDirectory(p.resolve(idx)))
-                            return apply(webpath + '/' + p.getFileName());
+                        if (Files.exists((subid = p.resolve(idx))) && !Files.isDirectory(subid))
+                            return apply(webpath + '/' + subid.getFileName());
                 }
 
                 if (autoDirList) {
+                    final String wp = webpath;
                     response = Response.Ok();
-                    try (final Stream<Path> fs = Files.list(p)) {
-                        response.setPayload(dirList(p.getFileName().toString(), fs
-                                .map(f -> {
-                                    try {
-                                        final FRes fr = new FRes();
-                                        fr.isFile = !Files.isDirectory(f);
-                                        fr.time = LocalDateTime.from(Files.getLastModifiedTime(f).toInstant().atZone(ZoneId.systemDefault()));
-                                        fr.name = f.getFileName().toString();
-                                        fr.size = fr.isFile ? Files.size(f) : 0;
+                    response.header(Headers.ContentType, MimeType.TEXTHTML);
+                    response.setPromise(new PhasedConsumer<>() {
+                        private byte[] data;
 
-                                        return fr;
-                                    } catch (final Exception e) {
-                                        logger.error(e.getMessage(), e);
-                                        return null;
-                                    }
-                                })
-                                .filter(Objects::nonNull)
-                                .collect(Collectors.toList())), MimeType.TEXTHTML);
-                    }
+                        @Override
+                        public void warmUp(final OutputStream os) {
+                            try (final Stream<Path> fs = Files.list(p)) {
+                                data = dirList(p.getFileName().toString(), fs
+                                        .map(f -> {
+                                            try {
+                                                final FRes fr = new FRes();
+                                                fr.isFile = !Files.isDirectory(f);
+                                                fr.time = LocalDateTime.from(Files.getLastModifiedTime(f).toInstant().atZone(ZoneId.systemDefault()));
+                                                fr.name = f.getFileName().toString();
+                                                fr.size = fr.isFile ? Files.size(f) : 0;
+
+                                                return fr;
+                                            } catch (final Exception e) {
+                                                logger.error(e.getMessage(), e);
+                                                return null;
+                                            }
+                                        })
+                                        .filter(Objects::nonNull)
+                                        .collect(Collectors.toList()));
+
+                                os.write((Headers.ContentLength + ": " + data.length).getBytes(StandardCharsets.UTF_8));
+                                os.write(FEED);
+                            } catch (final Exception e) {
+                                logger.error(wp + " :: " + e.getMessage(), e);
+                            }
+                        }
+
+                        @Override
+                        public void accept(final OutputStream os) {
+                            try {
+                                os.write(data);
+                            } catch (IOException e) {
+                                logger.error(wp + " :: " + e.getMessage(), e);
+                            }
+                        }
+                    });
                 } else
                     response = Response.Forbidden();
             } else {
@@ -157,13 +186,15 @@ public class DirectRead extends StaticRead {
                 });
             }
 
+
+            if (response.is200())
+                cacheMe(webpath, response);
+
             return response;
         } catch (final IOException e) {
             logger.error(e.getMessage(), e);
 
             return Response.ServerError();
-        } finally {
-            cacheMe(webpath, response);
         }
     }
 }

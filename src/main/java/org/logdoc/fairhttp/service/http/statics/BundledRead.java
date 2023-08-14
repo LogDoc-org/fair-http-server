@@ -74,7 +74,7 @@ public class BundledRead extends StaticRead {
         final FRes p = resolve(webpath);
 
         if (!p.exists)
-            return map404(webpath);
+            return Response.NotFound();
 
         Response response = pickCached(p.name);
 
@@ -134,14 +134,14 @@ public class BundledRead extends StaticRead {
                 });
             }
 
+            if (response.is200())
+                cacheMe(webpath, response);
+
             return response;
         } catch (final IOException e) {
             logger.error(e.getMessage(), e);
 
             return Response.ServerError();
-        } finally {
-            final Response finalResponse = response;
-            CompletableFuture.runAsync(() -> cacheMe(webpath, finalResponse));
         }
     }
 }
