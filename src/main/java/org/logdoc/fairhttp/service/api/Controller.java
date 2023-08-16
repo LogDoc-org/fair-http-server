@@ -57,6 +57,14 @@ public class Controller {
     public static Response ok(final String data) {
         final Response response = Response.Ok();
 
+        response.setPayload(data.getBytes(StandardCharsets.UTF_8), MimeType.TEXTHTML);
+
+        return response;
+    }
+
+    public static Response okText(final String data) {
+        final Response response = Response.Ok();
+
         response.setPayload(data.getBytes(StandardCharsets.UTF_8), MimeType.TEXTPLAIN);
 
         return response;

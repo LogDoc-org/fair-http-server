@@ -39,7 +39,7 @@ public class Response {
 
     {
         headers = new HashMap<>(2);
-        headers.put("Server", "FairHttp/1.1.28");
+        headers.put("Server", "FairHttp/1.2.1");
         headers.put("Connection", "keep-alive");
 
         cookies = new HashSet<>(2);
@@ -183,6 +183,13 @@ public class Response {
 
     public int size() {
         return payload == null ? -1 : payload.length;
+    }
+
+    public Response as(final MimeType mime) {
+        if (mime != null)
+            header(Headers.ContentType, mime);
+
+        return this;
     }
 
     public boolean is200() {

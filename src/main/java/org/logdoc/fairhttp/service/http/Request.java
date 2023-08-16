@@ -7,12 +7,10 @@ import org.logdoc.fairhttp.service.tools.*;
 import org.logdoc.fairhttp.service.tools.websocket.extension.IExtension;
 import org.logdoc.fairhttp.service.tools.websocket.protocol.IProtocol;
 import org.logdoc.helpers.gears.Pair;
-import org.slf4j.ILoggerFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.ByteArrayOutputStream;
-import java.io.IOException;
 import java.net.SocketAddress;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
@@ -152,6 +150,7 @@ public class Request {
             final Map<String, String> qm = new HashMap<>(4);
             Arrays.stream(u.substring(u.indexOf('?') + 1).split(Pattern.quote("&")))
                     .map(pair -> pair.split(Pattern.quote("=")))
+                    .filter(pair -> pair.length > 1)
                     .forEach(kv -> qm.put(kv[0], URLDecoder.decode(kv[1], StandardCharsets.UTF_8)));
 
             q = Collections.unmodifiableMap(qm);
