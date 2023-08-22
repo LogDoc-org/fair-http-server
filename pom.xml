@@ -4,7 +4,7 @@
 
     <groupId>org.logdoc</groupId>
     <artifactId>fair-http-server</artifactId>
-    <version>1.2.1</version> <!-- $Response.Version -->
+    <version>1.2.2-SNAPSHOT</version> <!-- $Response.Version -->
 
     <name>Logdoc FairHTTP server</name>
     <description>LogDoc.org project http server/app engine</description>
@@ -30,7 +30,7 @@
     <scm>
         <connection>scm:git:ssh://git@github.com/LogDoc-org/fair-http-server.git</connection>
         <developerConnection>scm:git:ssh://git@github.com/LogDoc-org/fair-http-server.git</developerConnection>
-        <tag>fair-http-server-1.2.1</tag>
+        <tag>fair-http-server-1.1.26</tag>
         <url>https://github.com/LogDoc-org/fair-http-server</url>
     </scm>
 
