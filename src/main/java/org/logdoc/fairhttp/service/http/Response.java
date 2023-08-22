@@ -1,9 +1,9 @@
 package org.logdoc.fairhttp.service.http;
 
 import org.logdoc.fairhttp.service.api.helpers.Headers;
-import org.logdoc.fairhttp.service.api.helpers.MimeType;
 import org.logdoc.fairhttp.service.tools.Json;
 import org.logdoc.fairhttp.service.tools.PhasedConsumer;
+import org.logdoc.helpers.std.MimeType;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;

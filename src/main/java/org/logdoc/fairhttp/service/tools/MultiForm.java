@@ -1,11 +1,13 @@
 package org.logdoc.fairhttp.service.tools;
 
-import org.logdoc.fairhttp.service.api.helpers.MimeType;
 import org.logdoc.helpers.Texts;
+import org.logdoc.helpers.std.MimeType;
 
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
+
+import static org.logdoc.helpers.std.MimeTypes.BINARY;
+import static org.logdoc.helpers.std.MimeTypes.TEXTPLAIN;
 
 /**
  * @author Denis Danilin | me@loslobos.ru
@@ -24,21 +26,21 @@ public class MultiForm extends HashMap<String, MultiForm.Part> implements FieldF
         if (Texts.isEmpty(name))
             return;
 
-        put(name, new Part(null, data, MimeType.BINARY, headers));
+        put(name, new Part(null, data, BINARY, headers));
     }
 
     public void textData(final String name, final String value) {
         if (Texts.isEmpty(name))
             return;
 
-        put(name, new Part(value, null, MimeType.TEXTPLAIN, null));
+        put(name, new Part(value, null, TEXTPLAIN, null));
     }
 
     public void fileData(final String name, final String fileName, final byte[] data, final MimeType contentType) {
         if (Texts.isEmpty(name))
             return;
 
-        put(name, new Part(fileName, data, contentType == null ? MimeType.BINARY : contentType, null));
+        put(name, new Part(fileName, data, contentType == null ? BINARY : contentType, null));
     }
 
     public static class Part {

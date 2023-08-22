@@ -2,7 +2,6 @@ package org.logdoc.fairhttp.service;
 
 import com.typesafe.config.Config;
 import com.typesafe.config.ConfigFactory;
-import org.logdoc.fairhttp.service.api.helpers.MimeType;
 import org.logdoc.fairhttp.service.api.helpers.Preloaded;
 import org.logdoc.fairhttp.service.http.Response;
 import org.logdoc.fairhttp.service.http.Server;
@@ -13,10 +12,8 @@ import org.slf4j.LoggerFactory;
 import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;
-import java.util.stream.Collectors;
+
+import static org.logdoc.helpers.std.MimeTypes.TEXTPLAIN;
 
 /**
  * @author Denis Danilin | me@loslobos.ru
@@ -60,7 +57,7 @@ public class StartFairServer {
             errorLogger.error(t.getMessage(), t);
             final Response response = Response.ServerError();
             if (t.getMessage() != null)
-                response.setPayload(t.getMessage().getBytes(StandardCharsets.UTF_8), MimeType.TEXTPLAIN);
+                response.setPayload(t.getMessage().getBytes(StandardCharsets.UTF_8), TEXTPLAIN);
 
             return response;
         });

@@ -3,9 +3,9 @@ package org.logdoc.fairhttp.service.http.statics;
 import com.typesafe.config.Config;
 import com.typesafe.config.ConfigException;
 import org.logdoc.fairhttp.service.DI;
-import org.logdoc.fairhttp.service.api.helpers.MimeType;
 import org.logdoc.fairhttp.service.http.Response;
 import org.logdoc.helpers.Sporadics;
+import org.logdoc.helpers.std.MimeType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 

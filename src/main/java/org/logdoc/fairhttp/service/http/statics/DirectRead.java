@@ -3,9 +3,9 @@ package org.logdoc.fairhttp.service.http.statics;
 import com.typesafe.config.Config;
 import com.typesafe.config.ConfigException;
 import org.logdoc.fairhttp.service.api.helpers.Headers;
-import org.logdoc.fairhttp.service.api.helpers.MimeType;
 import org.logdoc.fairhttp.service.http.Response;
 import org.logdoc.fairhttp.service.tools.PhasedConsumer;
+import org.logdoc.helpers.std.MimeType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -24,6 +24,7 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import static org.logdoc.fairhttp.service.http.Response.FEED;
+import static org.logdoc.helpers.std.MimeTypes.TEXTHTML;
 
 /**
  * @author Denis Danilin | me@loslobos.ru
@@ -100,7 +101,7 @@ public class DirectRead extends StaticRead {
                 if (autoDirList) {
                     final String wp = webpath;
                     response = Response.Ok();
-                    response.header(Headers.ContentType, MimeType.TEXTHTML);
+                    response.header(Headers.ContentType, TEXTHTML);
                     response.setPromise(new PhasedConsumer<>() {
                         private byte[] data;
 

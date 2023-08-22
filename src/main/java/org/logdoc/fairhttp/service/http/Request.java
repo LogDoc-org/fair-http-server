@@ -2,11 +2,11 @@ package org.logdoc.fairhttp.service.http;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import org.logdoc.fairhttp.service.api.helpers.Headers;
-import org.logdoc.fairhttp.service.api.helpers.MimeType;
 import org.logdoc.fairhttp.service.tools.*;
 import org.logdoc.fairhttp.service.tools.websocket.extension.IExtension;
 import org.logdoc.fairhttp.service.tools.websocket.protocol.IProtocol;
 import org.logdoc.helpers.gears.Pair;
+import org.logdoc.helpers.std.MimeType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -28,6 +28,7 @@ import static org.logdoc.fairhttp.service.tools.HttpBinStreaming.stringQuotes;
 import static org.logdoc.fairhttp.service.tools.websocket.protocol.IProtocol.WS_VERSION;
 import static org.logdoc.helpers.Texts.isEmpty;
 import static org.logdoc.helpers.Texts.notNull;
+import static org.logdoc.helpers.std.MimeTypes.*;
 
 /**
  * @author Denis Danilin | me@loslobos.ru
@@ -191,7 +192,7 @@ public class Request {
                 try {
                     t = new MimeType(header(Headers.ContentType));
                 } catch (Exception e) {
-                    t = MimeType.BINARY;
+                    t = BINARY;
                 }
             }
 
@@ -241,12 +242,26 @@ public class Request {
             this.contentType = contentType;
         }
 
+        public String asText() {
+            return asText(false);
+        }
+
+        public String asText(final boolean forced) {
+            return data != null && data.length > 0 && (forced || contentTypeMatch(TEXTALL))
+                    ? new String(data, StandardCharsets.UTF_8)
+                    : null;
+        }
+
         public byte[] asBytes() {
-            return Arrays.copyOf(data, data.length);
+            return data == null ? new byte[0] : Arrays.copyOf(data, data.length);
         }
 
         public JsonNode asJson() {
-            if (j == null && contentTypeMatch(MimeType.JSON))
+            return asJson(false);
+        }
+
+        public JsonNode asJson(final boolean forced) {
+            if (j == null && (forced || contentTypeMatch(JSON)))
                 synchronized (this) {
                     j = Json.parse(data);
                 }
@@ -259,14 +274,18 @@ public class Request {
         }
 
         public MultiForm asMultipart() {
-            if (m == null && data != null && data.length > 0 && contentTypeMatch(MimeType.MULTIPART))
+            return asMultipart(false);
+        }
+
+        public MultiForm asMultipart(final boolean forced) {
+            if (m == null && data != null && data.length > 0 && (forced || contentTypeMatch(MULTIPART)))
                 synchronized (this) {
                     m = new MultiForm();
 
                     final List<Pair<Integer, Integer>> positions = HttpBinStreaming.markParts(data, getBoundary(contentType));
 
                     for (final Pair<Integer, Integer> partMark : positions) {
-                        final AtomicReference<MimeType> cTypeHold = new AtomicReference<>(MimeType.TEXTPLAIN);
+                        final AtomicReference<MimeType> cTypeHold = new AtomicReference<>(TEXTPLAIN);
                         final Map<String, String> partHeaders = new HashMap<>(8) {
                             @Override
                             public String put(final String key, final String value) {
@@ -339,10 +358,10 @@ public class Request {
         }
 
         public String formField(final String name) {
-            if (isEmpty(name) || data == null || data.length == 0 || (!contentTypeMatch(MimeType.FORM) && !contentTypeMatch(MimeType.MULTIPART)))
+            if (isEmpty(name) || data == null || data.length == 0 || (!contentTypeMatch(FORM) && !contentTypeMatch(MULTIPART)))
                 return null;
 
-            if (contentTypeMatch(MimeType.FORM)) {
+            if (contentTypeMatch(FORM)) {
                 asForm();
 
                 return f == null ? null : f.field(name);
@@ -354,7 +373,11 @@ public class Request {
         }
 
         public Form asForm() {
-            if (f == null && data != null && data.length > 0 && contentTypeMatch(MimeType.FORM))
+            return asForm(false);
+        }
+
+        public Form asForm(final boolean forced) {
+            if (f == null && data != null && data.length > 0 && (forced || contentTypeMatch(FORM)))
                 synchronized (this) {
                     f = new Form();
                     final String fdata = new String(data, StandardCharsets.UTF_8);

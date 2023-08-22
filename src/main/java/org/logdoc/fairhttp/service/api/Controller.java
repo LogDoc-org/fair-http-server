@@ -1,9 +1,9 @@
 package org.logdoc.fairhttp.service.api;
 
 import com.fasterxml.jackson.databind.JsonNode;
-import org.logdoc.fairhttp.service.api.helpers.MimeType;
 import org.logdoc.fairhttp.service.http.Response;
 import org.logdoc.fairhttp.service.http.statics.DirectRead;
+import org.logdoc.helpers.std.MimeType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -11,6 +11,8 @@ import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+
+import static org.logdoc.helpers.std.MimeTypes.*;
 
 /**
  * @author Denis Danilin | me@loslobos.ru
@@ -27,7 +29,7 @@ public class Controller {
     public static Response ok(final JsonNode json) {
         final Response response = Response.Ok();
 
-        response.setPayload(json.toString().getBytes(StandardCharsets.UTF_8), MimeType.JSON);
+        response.setPayload(json.toString().getBytes(StandardCharsets.UTF_8), JSON);
 
         return response;
     }
@@ -57,7 +59,7 @@ public class Controller {
     public static Response ok(final String data) {
         final Response response = Response.Ok();
 
-        response.setPayload(data.getBytes(StandardCharsets.UTF_8), MimeType.TEXTHTML);
+        response.setPayload(data.getBytes(StandardCharsets.UTF_8), TEXTHTML);
 
         return response;
     }
@@ -65,7 +67,7 @@ public class Controller {
     public static Response okText(final String data) {
         final Response response = Response.Ok();
 
-        response.setPayload(data.getBytes(StandardCharsets.UTF_8), MimeType.TEXTPLAIN);
+        response.setPayload(data.getBytes(StandardCharsets.UTF_8), TEXTPLAIN);
 
         return response;
     }
@@ -73,7 +75,7 @@ public class Controller {
     public static Response ok(final byte[] bytes) {
         final Response response = Response.Ok();
 
-        response.setPayload(bytes, MimeType.BINARY);
+        response.setPayload(bytes, BINARY);
 
         return response;
     }
