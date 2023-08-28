@@ -14,7 +14,10 @@ import java.io.OutputStream;
 import java.math.BigInteger;
 import java.net.InetSocketAddress;
 import java.net.Socket;
+import java.net.SocketTimeoutException;
 import java.nio.charset.StandardCharsets;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
 
 /**
@@ -29,6 +32,7 @@ public final class WebSocket extends Response {
     private final Consumer<byte[]> binaryConsumer;
     private final Consumer<WebSocket> pingConsumer, pongConsumer;
     private final Consumer<CloseReason> closeConsumer;
+    private final AtomicInteger timeouts = new AtomicInteger(0);
     private int frameStage, payloadlength;
     private AFrame frame;
     private Frame incompleteframe;
@@ -348,6 +352,8 @@ public final class WebSocket extends Response {
 
             os.write(mes);
             os.flush();
+
+            timeouts.set(0);
         } catch (final Exception e) {
             writeErrorConsumer.accept(error(Texts.notNull(e.getMessage()), e));
         }
@@ -414,30 +420,27 @@ public final class WebSocket extends Response {
 
     void spinOff(final Socket socket) {
         try {
-            socket.setSoTimeout(0);
+            socket.setSoTimeout(60000); // minute
             os = socket.getOutputStream();
             remote = (InetSocketAddress) socket.getRemoteSocketAddress();
 
-            new Thread(() -> {
+            CompletableFuture.runAsync(() -> {
                 try {
                     os.write(WebSocket.this.asBytes());
 
                     final InputStream is = socket.getInputStream();
 
                     do {
-                        nextByte((byte) is.read());
-                    } while (!socket.isClosed());
+                        try {nextByte((byte) is.read());} catch (final SocketTimeoutException ignore) {timeouts.incrementAndGet();}
+                    } while (!socket.isClosed() && timeouts.get() < 720);
+
+                    if (!socket.isClosed())
+                        close(CloseFrame.GOING_AWAY, "Timed out", true);
                 } catch (final Exception e) {
                     readErrorConsumer.accept(error("Critical socket error", e));
                     close(CloseFrame.BUGGYCLOSE, e.getMessage());
                 }
-            }) {
-                @Override
-                public synchronized void start() {
-                    setDaemon(true);
-                    super.start();
-                }
-            }.start();
+            });
         } catch (final IOException e) {
             readErrorConsumer.accept(error("Critical socket error", e));
             close(CloseFrame.BUGGYCLOSE, e.getMessage());

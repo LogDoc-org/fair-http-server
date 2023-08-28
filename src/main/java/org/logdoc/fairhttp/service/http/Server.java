@@ -1,7 +1,7 @@
 package org.logdoc.fairhttp.service.http;
 
 import com.typesafe.config.Config;
-import org.logdoc.fairhttp.service.api.helpers.DynamicRoute;
+import org.logdoc.fairhttp.service.api.helpers.Route;
 import org.logdoc.fairhttp.service.api.helpers.endpoint.Endpoint;
 import org.logdoc.fairhttp.service.api.helpers.endpoint.Signature;
 import org.logdoc.fairhttp.service.api.helpers.endpoint.invokers.*;
@@ -22,7 +22,6 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.*;
 import java.util.concurrent.*;
-import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -214,8 +213,8 @@ public class Server {
         responseConsumer.accept(mappableResponse);
     }
 
-    public void addEndpoints(final Collection<DynamicRoute> endpoints) {
-        for (final DynamicRoute pretend : endpoints)
+    public void addEndpoints(final Collection<Route> endpoints) {
+        for (final Route pretend : endpoints)
             addEndpoint(pretend);
     }
 
@@ -257,7 +256,7 @@ public class Server {
     }
 
     @SuppressWarnings({"unchecked", "UnusedReturnValue"})
-    public synchronized boolean addEndpoint(final DynamicRoute endpoint) {
+    public synchronized boolean addEndpoint(final Route endpoint) {
         Endpoint ep;
 
         if (endpoints.add((ep = new Endpoint(endpoint.method, new Signature(endpoint.endpoint),

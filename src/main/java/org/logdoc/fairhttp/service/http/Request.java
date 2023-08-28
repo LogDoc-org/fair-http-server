@@ -230,6 +230,20 @@ public class Request {
         return c;
     }
 
+    public <T> T map(final Class<? extends T> klass) {return body().map(klass);}
+
+    public String asText() {return body().asText();}
+
+    public byte[] asBytes() {return body().asBytes();}
+
+    public JsonNode asJson() {return body().asJson();}
+
+    public MultiForm asMultipart() {return body().asMultipart();}
+
+    public String formField(final String name) {return body().formField(name);}
+
+    public Form asForm() {return body().asForm();}
+
     public static class Body {
         private final MimeType contentType;
         private final byte[] data;

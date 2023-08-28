@@ -3,8 +3,10 @@ package org.logdoc.fairhttp.service;
 import com.typesafe.config.Config;
 import org.logdoc.fairhttp.service.api.helpers.EagerSingleton;
 import org.logdoc.fairhttp.service.api.helpers.Preloaded;
+import org.logdoc.fairhttp.service.api.helpers.Route;
 import org.logdoc.fairhttp.service.api.helpers.Singleton;
 import org.logdoc.fairhttp.service.http.Request;
+import org.logdoc.fairhttp.service.http.Server;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -15,6 +17,7 @@ import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.function.Supplier;
+import java.util.stream.Collectors;
 
 import static org.logdoc.helpers.Texts.*;
 
@@ -39,6 +42,13 @@ public final class DI {
         knownConstructors = new HashMap<>();
         singleMap = new HashMap<>();
         eagers = new HashSet<>(8);
+    }
+
+    public static void endpoints(final Route... routes) {
+        if (routes == null || routes.length == 0)
+            return;
+
+        gain(Server.class).addEndpoints(Arrays.stream(routes).filter(Objects::nonNull).collect(Collectors.toList()));
     }
 
     synchronized static void init(final Config config0) {
