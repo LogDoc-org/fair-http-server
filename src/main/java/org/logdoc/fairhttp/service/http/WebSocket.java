@@ -14,10 +14,8 @@ import java.io.OutputStream;
 import java.math.BigInteger;
 import java.net.InetSocketAddress;
 import java.net.Socket;
-import java.net.SocketTimeoutException;
 import java.nio.charset.StandardCharsets;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
 
 /**
@@ -32,7 +30,8 @@ public final class WebSocket extends Response {
     private final Consumer<byte[]> binaryConsumer;
     private final Consumer<WebSocket> pingConsumer, pongConsumer;
     private final Consumer<CloseReason> closeConsumer;
-    private final AtomicInteger timeouts = new AtomicInteger(0);
+    private final boolean readEnabled, writeEnabled;
+    private final long readTimeoutMs;
     private int frameStage, payloadlength;
     private AFrame frame;
     private Frame incompleteframe;
@@ -43,7 +42,7 @@ public final class WebSocket extends Response {
     private OutputStream os;
     private InetSocketAddress remote;
 
-    WebSocket(final IExtension extension, final Consumer<String> textConsumer, final Consumer<byte[]> binaryConsumer, final Consumer<WebSocket> pingConsumer, final Consumer<WebSocket> pongConsumer, final Consumer<CloseReason> closeConsumer, final Consumer<ErrorRef> readErrorConsumer, final Consumer<ErrorRef> writeErrorConsumer) {
+    WebSocket(final IExtension extension, final Consumer<String> textConsumer, final Consumer<byte[]> binaryConsumer, final Consumer<WebSocket> pingConsumer, final Consumer<WebSocket> pongConsumer, final Consumer<CloseReason> closeConsumer, final Consumer<ErrorRef> readErrorConsumer, final Consumer<ErrorRef> writeErrorConsumer, final boolean readEnabled, final boolean writeEnabled, final long readTimeoutMs) {
         super(101, "Websocket Connection Upgrade");
         this.extension = extension;
         this.textConsumer = textConsumer;
@@ -53,6 +52,9 @@ public final class WebSocket extends Response {
         this.closeConsumer = closeConsumer;
         this.readErrorConsumer = readErrorConsumer;
         this.writeErrorConsumer = writeErrorConsumer;
+        this.readEnabled = readEnabled;
+        this.writeEnabled = writeEnabled;
+        this.readTimeoutMs = readTimeoutMs;
     }
 
     public InetSocketAddress remote() {
@@ -303,6 +305,11 @@ public final class WebSocket extends Response {
     }
 
     private synchronized void sendFrame(final AFrame framedata) {
+        if (!writeEnabled) {
+            writeErrorConsumer.accept(error("Websocket is read-only"));
+            return;
+        }
+
         if (closed) {
             writeErrorConsumer.accept(error("Websocket is closed"));
             return;
@@ -352,8 +359,6 @@ public final class WebSocket extends Response {
 
             os.write(mes);
             os.flush();
-
-            timeouts.set(0);
         } catch (final Exception e) {
             writeErrorConsumer.accept(error(Texts.notNull(e.getMessage()), e));
         }
@@ -420,27 +425,30 @@ public final class WebSocket extends Response {
 
     void spinOff(final Socket socket) {
         try {
-            socket.setSoTimeout(60000); // minute
             os = socket.getOutputStream();
             remote = (InetSocketAddress) socket.getRemoteSocketAddress();
 
-            CompletableFuture.runAsync(() -> {
-                try {
-                    os.write(WebSocket.this.asBytes());
+            if (readEnabled) {
+                socket.setSoTimeout((int) readTimeoutMs);
 
-                    final InputStream is = socket.getInputStream();
+                CompletableFuture.runAsync(() -> {
+                    try {
+                        os.write(WebSocket.this.asBytes());
 
-                    do {
-                        try {nextByte((byte) is.read());} catch (final SocketTimeoutException ignore) {timeouts.incrementAndGet();}
-                    } while (!socket.isClosed() && timeouts.get() < 720);
+                        final InputStream is = socket.getInputStream();
 
-                    if (!socket.isClosed())
-                        close(CloseFrame.GOING_AWAY, "Timed out", true);
-                } catch (final Exception e) {
-                    readErrorConsumer.accept(error("Critical socket error", e));
-                    close(CloseFrame.BUGGYCLOSE, e.getMessage());
-                }
-            });
+                        do {
+                            nextByte((byte) is.read());
+                        } while (!socket.isClosed());
+
+                        if (!socket.isClosed())
+                            close(CloseFrame.GOING_AWAY, "Timed out", true);
+                    } catch (final Exception e) {
+                        readErrorConsumer.accept(error("Critical socket error", e));
+                        close(CloseFrame.BUGGYCLOSE, e.getMessage());
+                    }
+                });
+            }
         } catch (final IOException e) {
             readErrorConsumer.accept(error("Critical socket error", e));
             close(CloseFrame.BUGGYCLOSE, e.getMessage());

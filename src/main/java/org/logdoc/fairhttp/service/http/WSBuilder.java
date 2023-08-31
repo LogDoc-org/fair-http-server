@@ -4,6 +4,7 @@ import org.logdoc.fairhttp.service.api.helpers.Headers;
 import org.logdoc.fairhttp.service.tools.websocket.extension.DefaultExtension;
 import org.logdoc.fairhttp.service.tools.websocket.extension.IExtension;
 import org.logdoc.fairhttp.service.tools.websocket.protocol.IProtocol;
+import org.slf4j.ILoggerFactory;
 
 import java.security.MessageDigest;
 import java.util.Base64;
@@ -26,9 +27,13 @@ public class WSBuilder {
     private Consumer<byte[]> binaryHandler;
     private Consumer<WebSocket> pingHandler, pongHandler;
     private Consumer<WebSocket.CloseReason> closeHandler;
+    private boolean readEnabled, writeEnabled;
+    private long readTimeoutMs;
 
     private WSBuilder(final Request request) {
         this.request = request;
+        readEnabled = writeEnabled = true;
+        readTimeoutMs = 300000L;
     }
 
     public static WSBuilder from(final Request request) {
@@ -103,11 +108,33 @@ public class WSBuilder {
         return this;
     }
 
+    public <T> WSBuilder withReadEnabled(final boolean readEnabled) {
+        this.readEnabled = readEnabled;
+
+        return this;
+    }
+
+    public <T> WSBuilder withReadTimeoutMs(final long readTimeoutMs) {
+        this.readTimeoutMs = readTimeoutMs;
+
+        return this;
+    }
+
+    public <T> WSBuilder withWriteEnabled(final boolean writeEnabled) {
+        this.writeEnabled = writeEnabled;
+
+        return this;
+    }
+
     public WebSocket build() {
         if (!request.isWebsocketUpgradable(extension, protocol))
             return null;
 
+        if (!readEnabled && !writeEnabled)
+            return null;
+
         final WebSocket socket = getWebSocket();
+
         try {
             socket.header(Headers.SecWebsocketAccept, Base64.getEncoder().encodeToString(MessageDigest.getInstance("SHA-1").digest((request.header(Headers.SecWebsocketKey) + RFC_KEY_UUID).getBytes())));
         } catch (final Exception ignore) {}
@@ -139,7 +166,10 @@ public class WSBuilder {
                 ponger,
                 closer,
                 reader,
-                writer
+                writer,
+                readEnabled,
+                writeEnabled,
+                readTimeoutMs
         );
     }
 }
