@@ -427,14 +427,13 @@ public final class WebSocket extends Response {
         try {
             os = socket.getOutputStream();
             remote = (InetSocketAddress) socket.getRemoteSocketAddress();
+            os.write(WebSocket.this.asBytes());
 
             if (readEnabled) {
                 socket.setSoTimeout((int) readTimeoutMs);
 
                 CompletableFuture.runAsync(() -> {
                     try {
-                        os.write(WebSocket.this.asBytes());
-
                         final InputStream is = socket.getInputStream();
 
                         do {
