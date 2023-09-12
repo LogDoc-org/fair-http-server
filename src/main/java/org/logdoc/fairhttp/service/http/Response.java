@@ -39,7 +39,7 @@ public class Response {
 
     {
         headers = new HashMap<>(2);
-        headers.put("Server", "FairHttp/1.2.1");
+        headers.put("Server", "FairHttp/1.2.5");
         headers.put("Connection", "keep-alive");
 
         cookies = new HashSet<>(2);

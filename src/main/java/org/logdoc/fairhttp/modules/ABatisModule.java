@@ -112,6 +112,45 @@ public abstract class ABatisModule implements Preloaded {
         DI.gain(named, Configuration.class).getTypeHandlerRegistry().register(clas);
     }
 
+    protected final void addAlias(final String alias, final Class<?> cls) {
+        addAlias(null, alias, cls);
+    }
+
+    protected final void addAlias(final String alias, final String cls) {
+        addAlias(null, alias, cls);
+    }
+
+    protected final void addSimpleAlias(final Class<?> cls) {
+        addSimpleAlias(null, cls);
+    }
+
+    protected final void addAlias(final String named, final String alias, final Class<?> cls) {
+        if (notNull(named).equals("default")) {
+            addAlias(null, alias, cls);
+            return;
+        }
+
+        DI.gain(named, Configuration.class).getTypeAliasRegistry().registerAlias(alias, cls);
+    }
+
+    protected final void addSimpleAlias(final String named, final Class<?> cls) {
+        if (notNull(named).equals("default")) {
+            addSimpleAlias(null, cls);
+            return;
+        }
+
+        DI.gain(named, Configuration.class).getTypeAliasRegistry().registerAlias(cls);
+    }
+
+    protected final void addAlias(final String named, final String alias, final String cls) {
+        if (notNull(named).equals("default")) {
+            addAlias(null, alias, cls);
+            return;
+        }
+
+        DI.gain(named, Configuration.class).getTypeAliasRegistry().registerAlias(alias, cls);
+    }
+
     protected final <A> void addMapper(final Class<A> clas) {
         addMapper(null, clas);
     }
