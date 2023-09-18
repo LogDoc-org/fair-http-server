@@ -2,29 +2,23 @@ package org.logdoc.fairhttp.service.http;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import org.logdoc.fairhttp.service.api.helpers.Headers;
-import org.logdoc.fairhttp.service.tools.*;
+import org.logdoc.fairhttp.service.tools.Form;
+import org.logdoc.fairhttp.service.tools.Json;
+import org.logdoc.fairhttp.service.tools.MultiForm;
+import org.logdoc.fairhttp.service.tools.ParameterParser;
 import org.logdoc.fairhttp.service.tools.websocket.extension.IExtension;
 import org.logdoc.fairhttp.service.tools.websocket.protocol.IProtocol;
-import org.logdoc.helpers.gears.Pair;
 import org.logdoc.helpers.std.MimeType;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
-import java.io.ByteArrayOutputStream;
 import java.net.SocketAddress;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.*;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicReference;
-import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.regex.Pattern;
 
-import static org.logdoc.fairhttp.service.tools.HttpBinStreaming.getBoundary;
-import static org.logdoc.fairhttp.service.tools.HttpBinStreaming.stringQuotes;
 import static org.logdoc.fairhttp.service.tools.websocket.protocol.IProtocol.WS_VERSION;
 import static org.logdoc.helpers.Texts.isEmpty;
 import static org.logdoc.helpers.Texts.notNull;
@@ -36,7 +30,12 @@ import static org.logdoc.helpers.std.MimeTypes.*;
  * fair-http-server ☭ sweat and blood
  */
 public class Request {
-    private static final Logger logger = LoggerFactory.getLogger(Request.class);
+    private static final byte CR = 0x0D, LF = 0x0A, DASH = 0x2D;
+
+    public static final byte[] streamEnd = {DASH, DASH},
+            headerSeparator = {CR, LF, CR, LF},
+            fieldSeparator = {CR, LF},
+            boundaryPrefix = {CR, LF, DASH, DASH};
 
     private final byte[] rawHead;
     private final Function<Request, byte[]> bodySupplier;
@@ -52,6 +51,18 @@ public class Request {
         this.rawHead = rawHead;
         this.remote = remote;
         this.bodySupplier = bodySupplier;
+    }
+
+    private static String stringQuotes(String value) {
+        if (value == null)
+            return null;
+
+        value = notNull(value);
+
+        if (!value.startsWith("\""))
+            return value;
+
+        return value.substring(1, value.length() - 1);
     }
 
     public boolean isWebsocketUpgradable() {
@@ -295,11 +306,11 @@ public class Request {
             if (m == null && data != null && data.length > 0 && (forced || contentTypeMatch(MULTIPART)))
                 synchronized (this) {
                     m = new MultiForm();
+                    final byte[] bnd = contentType.getParameter("boundary").getBytes(StandardCharsets.ISO_8859_1);
+                    boolean done = false;
+                    int i = 0;
 
-                    final List<Pair<Integer, Integer>> positions = HttpBinStreaming.markParts(data, getBoundary(contentType));
-
-                    for (final Pair<Integer, Integer> partMark : positions) {
-                        final AtomicReference<MimeType> cTypeHold = new AtomicReference<>(TEXTPLAIN);
+                    while (!done) {
                         final Map<String, String> partHeaders = new HashMap<>(8) {
                             @Override
                             public String put(final String key, final String value) {
@@ -312,31 +323,45 @@ public class Request {
                             }
                         };
 
-                        try (final ByteArrayOutputStream tempo = new ByteArrayOutputStream(256)) {
-                            final AtomicBoolean inHead = new AtomicBoolean(true);
-                            final Consumer<Byte> headersConsumer = HttpBinStreaming.headersTicker(tempo,
-                                    len -> {},
-                                    chunked -> {},
-                                    cTypeHold::set,
-                                    partHeaders::put,
-                                    (n, v) -> {},
-                                    unused -> tempo.reset(),
-                                    unused -> {
-                                        tempo.reset();
-                                        inHead.set(false);
-                                    }
-                            );
-                            final Consumer<Byte> bodyConsumer = tempo::write;
+                        i = indexOf(data, bnd, i);
 
-                            for (int i = partMark.first; i < partMark.second; i++) {
-                                if (inHead.get())
-                                    headersConsumer.accept(data[i]);
-                                else
-                                    bodyConsumer.accept(data[i]);
+                        if (i == -1)
+                            break;
+
+                        i += bnd.length;
+
+                        final int hdrs = indexOf(data, headerSeparator, i + 1);
+
+                        if (hdrs > i) {
+                            int hdr;
+
+                            while ((hdr = indexOf(data, fieldSeparator, i)) <= hdrs) {
+                                final String hs = notNull(new String(Arrays.copyOfRange(data, i, hdr), StandardCharsets.UTF_8));
+                                final int sep = hs.indexOf(':');
+
+                                if (sep != -1)
+                                    partHeaders.put(notNull(hs.substring(0, sep)), notNull(hs.substring(sep + 1)));
+
+                                i = hdr + fieldSeparator.length;
                             }
+
+                            i += 2;
+
+                            int till = indexOf(data, boundaryPrefix, i);
+
+                            if (till == -1) {
+                                done = true;
+                                till = indexOf(data, streamEnd, i);
+                            }
+
+                            final byte[] pb = Arrays.copyOfRange(data, i, till);
+                            i = till;
 
                             final String cd;
                             if ((cd = partHeaders.get(Headers.ContentDisposition)) != null) {
+                                MimeType cType = TEXTPLAIN;
+                                try {cType = new MimeType(partHeaders.get(Headers.ContentType));} catch (final Exception ignore) {}
+
                                 String fileName = null, fieldName = null;
 
                                 final String cdl = cd.trim().toLowerCase();
@@ -356,19 +381,30 @@ public class Request {
                                     continue;
 
                                 if (!isEmpty(fileName))
-                                    m.fileData(fieldName, fileName, tempo.toByteArray(), cTypeHold.get());
-                                else if (cTypeHold.get().getBaseType().startsWith("text/"))
-                                    m.textData(fieldName, tempo.toString(StandardCharsets.UTF_8));
+                                    m.fileData(fieldName, fileName, pb, cType);
+                                else if (cType.getBaseType().startsWith("text/"))
+                                    m.textData(fieldName, new String(pb, StandardCharsets.UTF_8));
                                 else
-                                    m.binData(fieldName, tempo.toByteArray(), partHeaders);
+                                    m.binData(fieldName, pb, partHeaders);
                             }
-                        } catch (final Exception e) {
-                            logger.error(e.getMessage(), e);
                         }
                     }
                 }
 
             return m;
+        }
+
+        private int indexOf(final byte[] data, final byte[] match, final int from) {
+            MAIN:
+            for (int i = from; i < data.length - match.length; i++) {
+                for (int j = 0; j < match.length; j++)
+                    if (data[i + j] != match[j])
+                        continue MAIN;
+
+                return i;
+            }
+
+            return -1;
         }
 
         public String formField(final String name) {
