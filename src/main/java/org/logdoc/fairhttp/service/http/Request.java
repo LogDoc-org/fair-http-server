@@ -2,10 +2,7 @@ package org.logdoc.fairhttp.service.http;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import org.logdoc.fairhttp.service.api.helpers.Headers;
-import org.logdoc.fairhttp.service.tools.Form;
-import org.logdoc.fairhttp.service.tools.Json;
-import org.logdoc.fairhttp.service.tools.MultiForm;
-import org.logdoc.fairhttp.service.tools.ParameterParser;
+import org.logdoc.fairhttp.service.tools.*;
 import org.logdoc.fairhttp.service.tools.websocket.extension.IExtension;
 import org.logdoc.fairhttp.service.tools.websocket.protocol.IProtocol;
 import org.logdoc.helpers.std.MimeType;
@@ -29,7 +26,7 @@ import static org.logdoc.helpers.std.MimeTypes.*;
  * 26.07.2023 15:01
  * fair-http-server ☭ sweat and blood
  */
-public class Request {
+public class Request extends MapAttributed {
     private static final byte CR = 0x0D, LF = 0x0A, DASH = 0x2D;
 
     public static final byte[] streamEnd = {DASH, DASH},

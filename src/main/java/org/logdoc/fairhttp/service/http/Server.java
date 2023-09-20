@@ -2,6 +2,8 @@ package org.logdoc.fairhttp.service.http;
 
 import com.typesafe.config.Config;
 import org.logdoc.fairhttp.service.api.helpers.Route;
+import org.logdoc.fairhttp.service.api.helpers.aop.Post;
+import org.logdoc.fairhttp.service.api.helpers.aop.Pre;
 import org.logdoc.fairhttp.service.api.helpers.endpoint.Endpoint;
 import org.logdoc.fairhttp.service.api.helpers.endpoint.Signature;
 import org.logdoc.fairhttp.service.api.helpers.endpoint.invokers.*;
@@ -22,6 +24,7 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.*;
 import java.util.concurrent.*;
+import java.util.function.BiPredicate;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -253,6 +256,54 @@ public class Server {
             }
 
         return false;
+    }
+
+    public synchronized void removePre(final BiPredicate<String, String> methodSignaturePredicate, final Pre filter) {
+        if (methodSignaturePredicate == null || filter == null)
+            return;
+
+        changeChain(methodSignaturePredicate, e -> e.removePre(filter));
+    }
+
+    public synchronized void removePost(final BiPredicate<String, String> methodSignaturePredicate, final Post filter) {
+        if (methodSignaturePredicate == null || filter == null)
+            return;
+
+        changeChain(methodSignaturePredicate, e -> e.removePost(filter));
+    }
+
+    public synchronized void addFirstPre(final BiPredicate<String, String> methodSignaturePredicate, final Pre filter) {
+        if (methodSignaturePredicate == null || filter == null)
+            return;
+
+        changeChain(methodSignaturePredicate, e -> e.addFirstPre(filter));
+    }
+
+    public synchronized void addLastPre(final BiPredicate<String, String> methodSignaturePredicate, final Pre filter) {
+        if (methodSignaturePredicate == null || filter == null)
+            return;
+
+        changeChain(methodSignaturePredicate, e -> e.addLastPre(filter));
+    }
+
+    public synchronized void addFirstPost(final BiPredicate<String, String> methodSignaturePredicate, final Post filter) {
+        if (methodSignaturePredicate == null || filter == null)
+            return;
+
+        changeChain(methodSignaturePredicate, e -> e.addFirstPost(filter));
+    }
+
+    public synchronized void addLastPost(final BiPredicate<String, String> methodSignaturePredicate, final Post filter) {
+        if (methodSignaturePredicate == null || filter == null)
+            return;
+
+        changeChain(methodSignaturePredicate, e -> e.addLastPost(filter));
+    }
+
+    private synchronized void changeChain(final BiPredicate<String, String> methodSignaturePredicate, final Consumer<Endpoint> consumer) {
+        endpoints.stream()
+                .filter(b -> methodSignaturePredicate.test(b.method(), b.signature()))
+                .forEach(consumer);
     }
 
     @SuppressWarnings({"unchecked", "UnusedReturnValue"})

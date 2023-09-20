@@ -2,6 +2,7 @@ package org.logdoc.fairhttp.service.http;
 
 import org.logdoc.fairhttp.service.api.helpers.Headers;
 import org.logdoc.fairhttp.service.tools.Json;
+import org.logdoc.fairhttp.service.tools.MapAttributed;
 import org.logdoc.fairhttp.service.tools.PhasedConsumer;
 import org.logdoc.helpers.std.MimeType;
 
@@ -27,7 +28,7 @@ import static org.logdoc.helpers.Texts.notNull;
  * 26.07.2023 17:28
  * fair-http-server ☭ sweat and blood
  */
-public class Response {
+public class Response extends MapAttributed {
     public static final byte[] FEED = new byte[]{'\r', '\n'};
     private static final byte[] PROTO = "HTTP/1.1".getBytes(StandardCharsets.US_ASCII);
     protected final Map<String, String> headers;
@@ -39,7 +40,7 @@ public class Response {
 
     {
         headers = new HashMap<>(2);
-        headers.put("Server", "FairHttp/1.2.5");
+        headers.put("Server", "FairHttp/1.2.7");
         headers.put("Connection", "keep-alive");
 
         cookies = new HashSet<>(2);

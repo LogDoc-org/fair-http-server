@@ -5,6 +5,8 @@ import org.logdoc.fairhttp.service.api.helpers.EagerSingleton;
 import org.logdoc.fairhttp.service.api.helpers.Preloaded;
 import org.logdoc.fairhttp.service.api.helpers.Route;
 import org.logdoc.fairhttp.service.api.helpers.Singleton;
+import org.logdoc.fairhttp.service.api.helpers.aop.Post;
+import org.logdoc.fairhttp.service.api.helpers.aop.Pre;
 import org.logdoc.fairhttp.service.http.Request;
 import org.logdoc.fairhttp.service.http.Server;
 import org.slf4j.Logger;
@@ -16,10 +18,12 @@ import java.lang.reflect.Modifier;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
+import java.util.function.Predicate;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
-import static org.logdoc.helpers.Texts.*;
+import static org.logdoc.helpers.Texts.isEmpty;
+import static org.logdoc.helpers.Texts.notNull;
 
 
 /**
@@ -42,6 +46,54 @@ public final class DI {
         knownConstructors = new HashMap<>();
         singleMap = new HashMap<>();
         eagers = new HashSet<>(8);
+    }
+
+    public static void removePre(final Pre pre) {
+        removePre(pre, null, null);
+    }
+
+    public static void removePost(final Post post) {
+        removePost(post, null, null);
+    }
+
+    public static void removePre(final Pre pre, final Predicate<String> methodMatcher, final Predicate<String> signatureMatcher) {
+        gain(Server.class).removePre((method, signature) -> (methodMatcher == null || methodMatcher.test(method)) && (signatureMatcher == null || signatureMatcher.test(signature)), pre);
+    }
+
+    public static void removePost(final Post post, final Predicate<String> methodMatcher, final Predicate<String> signatureMatcher) {
+        gain(Server.class).removePost((method, signature) -> (methodMatcher == null || methodMatcher.test(method)) && (signatureMatcher == null || signatureMatcher.test(signature)), post);
+    }
+
+    public static void addPreFirst(final Pre pre) {
+        addPreFirst(pre, null, null);
+    }
+
+    public static void addPreLast(final Pre pre) {
+        addPreLast(pre, null, null);
+    }
+
+    public static void addPostFirst(final Post post) {
+        addPostFirst(post, null, null);
+    }
+
+    public static void addPostLast(final Post post) {
+        addPostLast(post, null, null);
+    }
+
+    public static void addPreFirst(final Pre pre, final Predicate<String> methodMatcher, final Predicate<String> signatureMatcher) {
+        gain(Server.class).addFirstPre((method, signature) -> (methodMatcher == null || methodMatcher.test(method)) && (signatureMatcher == null || signatureMatcher.test(signature)), pre);
+    }
+
+    public static void addPreLast(final Pre pre, final Predicate<String> methodMatcher, final Predicate<String> signatureMatcher) {
+        gain(Server.class).addLastPre((method, signature) -> (methodMatcher == null || methodMatcher.test(method)) && (signatureMatcher == null || signatureMatcher.test(signature)), pre);
+    }
+
+    public static void addPostFirst(final Post post, final Predicate<String> methodMatcher, final Predicate<String> signatureMatcher) {
+        gain(Server.class).addFirstPost((method, signature) -> (methodMatcher == null || methodMatcher.test(method)) && (signatureMatcher == null || signatureMatcher.test(signature)), post);
+    }
+
+    public static void addPostLast(final Post post, final Predicate<String> methodMatcher, final Predicate<String> signatureMatcher) {
+        gain(Server.class).addLastPost((method, signature) -> (methodMatcher == null || methodMatcher.test(method)) && (signatureMatcher == null || signatureMatcher.test(signature)), post);
     }
 
     public static void endpoints(final Route... routes) {
@@ -102,12 +154,6 @@ public final class DI {
         ref(named).unbind0(type);
     }
 
-    private synchronized void unbind0(final Class<?> type) {
-        bindMap.remove(type);
-        knownConstructors.remove(type.hashCode());
-        singleMap.remove(type.hashCode());
-    }
-
     public static <A> void bindProvider(final Class<A> type, final Supplier<? extends A> provider) {
         bindProvider(null, type, provider);
     }
@@ -132,6 +178,12 @@ public final class DI {
 
     public static <A> A gain(final String named, final Class<A> clas) {
         return ref(named).gainInternal(clas, Collections.emptyList());
+    }
+
+    private synchronized void unbind0(final Class<?> type) {
+        bindMap.remove(type);
+        knownConstructors.remove(type.hashCode());
+        singleMap.remove(type.hashCode());
     }
 
     private synchronized void initEagers0() {
