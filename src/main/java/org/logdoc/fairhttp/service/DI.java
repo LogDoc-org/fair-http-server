@@ -18,6 +18,7 @@ import java.lang.reflect.Modifier;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
+import java.util.function.BiPredicate;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
@@ -57,11 +58,11 @@ public final class DI {
     }
 
     public static void removePre(final Pre pre, final Predicate<String> methodMatcher, final Predicate<String> signatureMatcher) {
-        gain(Server.class).removePre((method, signature) -> (methodMatcher == null || methodMatcher.test(method)) && (signatureMatcher == null || signatureMatcher.test(signature)), pre);
+        gain(Server.class).removePre(msp(methodMatcher, signatureMatcher), pre);
     }
 
     public static void removePost(final Post post, final Predicate<String> methodMatcher, final Predicate<String> signatureMatcher) {
-        gain(Server.class).removePost((method, signature) -> (methodMatcher == null || methodMatcher.test(method)) && (signatureMatcher == null || signatureMatcher.test(signature)), post);
+        gain(Server.class).removePost(msp(methodMatcher, signatureMatcher), post);
     }
 
     public static void addPreFirst(final Pre pre) {
@@ -81,19 +82,23 @@ public final class DI {
     }
 
     public static void addPreFirst(final Pre pre, final Predicate<String> methodMatcher, final Predicate<String> signatureMatcher) {
-        gain(Server.class).addFirstPre((method, signature) -> (methodMatcher == null || methodMatcher.test(method)) && (signatureMatcher == null || signatureMatcher.test(signature)), pre);
+        gain(Server.class).addFirstPre(msp(methodMatcher, signatureMatcher), pre);
     }
 
     public static void addPreLast(final Pre pre, final Predicate<String> methodMatcher, final Predicate<String> signatureMatcher) {
-        gain(Server.class).addLastPre((method, signature) -> (methodMatcher == null || methodMatcher.test(method)) && (signatureMatcher == null || signatureMatcher.test(signature)), pre);
+        gain(Server.class).addLastPre(msp(methodMatcher, signatureMatcher), pre);
     }
 
     public static void addPostFirst(final Post post, final Predicate<String> methodMatcher, final Predicate<String> signatureMatcher) {
-        gain(Server.class).addFirstPost((method, signature) -> (methodMatcher == null || methodMatcher.test(method)) && (signatureMatcher == null || signatureMatcher.test(signature)), post);
+        gain(Server.class).addFirstPost(msp(methodMatcher, signatureMatcher), post);
     }
 
     public static void addPostLast(final Post post, final Predicate<String> methodMatcher, final Predicate<String> signatureMatcher) {
-        gain(Server.class).addLastPost((method, signature) -> (methodMatcher == null || methodMatcher.test(method)) && (signatureMatcher == null || signatureMatcher.test(signature)), post);
+        gain(Server.class).addLastPost(msp(methodMatcher, signatureMatcher), post);
+    }
+
+    private static BiPredicate<String, String> msp(final Predicate<String> methodMatcher, final Predicate<String> signatureMatcher) {
+        return (method, signature) -> (methodMatcher == null || methodMatcher.test(method)) && (signatureMatcher == null || signatureMatcher.test(signature));
     }
 
     public static void endpoints(final Route... routes) {
@@ -274,9 +279,9 @@ public final class DI {
 
     @SuppressWarnings("unchecked")
     private <A> A build(final Class<A> clas, final int hash, final Collection<Class<?>> ancestors) {
-        Supplier<?> constructor;
-        if ((constructor = knownConstructors.get(hash)) != null)
-            return (A) constructor.get();
+        Supplier<A> constructor;
+        if ((constructor = (Supplier<A>) knownConstructors.get(hash)) != null)
+            return constructor.get();
 
         final Constructor<A>[] ctrs = (Constructor<A>[]) clas.getDeclaredConstructors();
 
@@ -348,6 +353,6 @@ public final class DI {
             knownConstructors.put(hash, constructor);
         }
 
-        return (A) constructor.get();
+        return constructor.get();
     }
 }

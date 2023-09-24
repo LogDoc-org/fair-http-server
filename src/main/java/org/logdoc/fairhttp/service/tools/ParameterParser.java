@@ -129,7 +129,7 @@ public class ParameterParser {
             }
             if (hasChar() && (chars[pos] == separator)) pos++; // skip separator
 
-            if ((paramName != null) && (paramName.length() > 0)) {
+            if ((paramName != null) && (!paramName.isEmpty())) {
                 if (this.lowerCaseNames) paramName = paramName.toLowerCase(Locale.ENGLISH);
 
                 params.put(paramName, paramValue);
@@ -252,20 +252,20 @@ public class ParameterParser {
         while (off < endOffset) {
             byte ch = data[off++];
 
-            if (ch == '_') out.write(' ');
+            if (ch == '_')
+                out.write(' ');
             else if (ch == '=') {
                 if (off + 1 >= endOffset) throw new IOException("Invalid quoted printable encoding; truncated escape sequence");
 
                 byte b1 = data[off++];
                 byte b2 = data[off++];
 
-                if (b1 == '\r') if (b2 != '\n') {
+                if (b1 == '\r') if (b2 != '\n')
                     throw new IOException("Invalid quoted printable encoding; CR must be followed by LF");
-                } else {
-                    int c1 = hexToBinary(b1);
-                    int c2 = hexToBinary(b2);
-                    out.write((c1 << MimeShift) | c2);
-                }
+
+                int c1 = hexToBinary(b1);
+                int c2 = hexToBinary(b2);
+                out.write((c1 << MimeShift) | c2);
             } else out.write(ch);
         }
     }
