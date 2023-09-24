@@ -1,6 +1,7 @@
 package org.logdoc.fairhttp.service.http;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.node.MissingNode;
 import org.logdoc.fairhttp.service.api.helpers.Headers;
 import org.logdoc.fairhttp.service.tools.*;
 import org.logdoc.fairhttp.service.tools.websocket.extension.IExtension;
@@ -292,7 +293,9 @@ public class Request extends MapAttributed {
         }
 
         public <T> T map(final Class<? extends T> klass) {
-            return Json.fromJson(asJson(), klass);
+            final JsonNode jn = asJson();
+
+            return jn == null || jn instanceof MissingNode ? null : Json.fromJson(jn, klass);
         }
 
         public MultiForm asMultipart() {
