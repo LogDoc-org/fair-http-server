@@ -27,7 +27,8 @@ public final class PreChain implements Function<Request, Response> {
 
     @Override
     public Response apply(final Request request) {
-        for (final Pre pre :handlers) {
+        for (final Pre pre : handlers) {
+            pre.earlyBroken = null;
             pre.accept(request);
 
             if (pre.earlyBroken != null)
