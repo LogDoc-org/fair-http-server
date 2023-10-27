@@ -67,8 +67,12 @@ public class Handler extends Thread {
                 return;
             }
         } catch (final SocketTimeoutException e) {
-            if (i > 0)
-                logger.error(id + " :: Cant read request headers, timed out after " + i + " bytes. Drop connection.");
+            if (i > 0) {
+                String data = "";
+                try { data = " ::> " + new String(Arrays.copyOfRange(head, 0, i), StandardCharsets.UTF_8); } catch (final Exception ignore) { }
+                logger.error(id + " :: Cant read request headers, timed out after " + i + " bytes. Drop connection." + data);
+            }
+
             close();
             return;
         } catch (final IOException e) {
@@ -76,7 +80,9 @@ public class Handler extends Thread {
             close();
             return;
         } catch (final ArrayIndexOutOfBoundsException e) {
-            logger.error(id + " :: Headers section is out of the limit 8192 bytes. Drop connection", e);
+            String data = "";
+            try { data = " ::> " + new String(Arrays.copyOfRange(head, 0, 1024), StandardCharsets.UTF_8); } catch (final Exception ignore) { }
+            logger.error(id + " :: Headers section is out of the limit 8192 bytes. Drop connection." + data, e);
             close();
             return;
         }

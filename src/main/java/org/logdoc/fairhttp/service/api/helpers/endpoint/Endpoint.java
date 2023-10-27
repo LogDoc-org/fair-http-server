@@ -7,7 +7,6 @@ import org.logdoc.fairhttp.service.api.helpers.aop.PreChain;
 import org.logdoc.fairhttp.service.http.Request;
 import org.logdoc.fairhttp.service.http.Response;
 import org.logdoc.helpers.gears.Pair;
-import org.slf4j.ILoggerFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -21,7 +20,7 @@ import java.util.function.BiFunction;
  * FairHttpService ☭ sweat and blood
  */
 public class Endpoint implements Comparable<Endpoint> {
-    private static final Logger preLogger = LoggerFactory.getLogger("PreFilters"), postLogger = LoggerFactory.getLogger("PostFilters");
+    private static final Logger preLogger = LoggerFactory.getLogger("PreFilters");
 
     private final String method;
     private final Signature signature;
@@ -50,7 +49,7 @@ public class Endpoint implements Comparable<Endpoint> {
             return broken;
         }
 
-        return post.apply(invoker.apply(request, signature.values(request.path())));
+        return post.apply(request, invoker.apply(request, signature.values(request.path())));
     }
 
     public void removePre(final Pre pre) {
