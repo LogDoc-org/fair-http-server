@@ -161,7 +161,15 @@ public class Request extends MapAttributed {
             Arrays.stream(u.substring(u.indexOf('?') + 1).split(Pattern.quote("&")))
                     .map(pair -> pair.split(Pattern.quote("=")))
                     .filter(pair -> pair.length > 1)
-                    .forEach(kv -> qm.put(kv[0], URLDecoder.decode(kv[1], StandardCharsets.UTF_8)));
+                    .forEach(kv -> {
+                        String v = null;
+                        try {v = URLDecoder.decode(kv[1], StandardCharsets.UTF_8);} catch (final IllegalArgumentException ignore) {
+                            v = URLDecoder.decode(kv[1], StandardCharsets.US_ASCII);
+                        } catch (final Exception ignore) {}
+
+                        if (v != null)
+                            qm.put(kv[0], v);
+                    });
 
             q = Collections.unmodifiableMap(qm);
         }
