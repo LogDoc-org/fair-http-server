@@ -1,12 +1,18 @@
 package org.logdoc.fairhttp.service;
 
 import com.typesafe.config.Config;
+import com.zaxxer.hikari.HikariConfig;
+import com.zaxxer.hikari.HikariDataSource;
+import org.apache.ibatis.mapping.Environment;
+import org.apache.ibatis.session.Configuration;
+import org.apache.ibatis.session.SqlSessionFactory;
+import org.apache.ibatis.session.SqlSessionFactoryBuilder;
+import org.apache.ibatis.session.SqlSessionManager;
+import org.apache.ibatis.transaction.jdbc.JdbcTransactionFactory;
 import org.logdoc.fairhttp.service.api.helpers.EagerSingleton;
 import org.logdoc.fairhttp.service.api.helpers.Preloaded;
 import org.logdoc.fairhttp.service.api.helpers.Route;
 import org.logdoc.fairhttp.service.api.helpers.Singleton;
-import org.logdoc.fairhttp.service.api.helpers.aop.Post;
-import org.logdoc.fairhttp.service.api.helpers.aop.Pre;
 import org.logdoc.fairhttp.service.http.Request;
 import org.logdoc.fairhttp.service.http.Server;
 import org.slf4j.Logger;
@@ -18,8 +24,6 @@ import java.lang.reflect.Modifier;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
-import java.util.function.BiPredicate;
-import java.util.function.Predicate;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
@@ -47,58 +51,6 @@ public final class DI {
         knownConstructors = new HashMap<>();
         singleMap = new HashMap<>();
         eagers = new HashSet<>(8);
-    }
-
-    public static void removePre(final Pre pre) {
-        removePre(pre, null, null);
-    }
-
-    public static void removePost(final Post post) {
-        removePost(post, null, null);
-    }
-
-    public static void removePre(final Pre pre, final Predicate<String> methodMatcher, final Predicate<String> signatureMatcher) {
-        gain(Server.class).removePre(msp(methodMatcher, signatureMatcher), pre);
-    }
-
-    public static void removePost(final Post post, final Predicate<String> methodMatcher, final Predicate<String> signatureMatcher) {
-        gain(Server.class).removePost(msp(methodMatcher, signatureMatcher), post);
-    }
-
-    public static void addPreFirst(final Pre pre) {
-        addPreFirst(pre, null, null);
-    }
-
-    public static void addPreLast(final Pre pre) {
-        addPreLast(pre, null, null);
-    }
-
-    public static void addPostFirst(final Post post) {
-        addPostFirst(post, null, null);
-    }
-
-    public static void addPostLast(final Post post) {
-        addPostLast(post, null, null);
-    }
-
-    public static void addPreFirst(final Pre pre, final Predicate<String> methodMatcher, final Predicate<String> signatureMatcher) {
-        gain(Server.class).addFirstPre(msp(methodMatcher, signatureMatcher), pre);
-    }
-
-    public static void addPreLast(final Pre pre, final Predicate<String> methodMatcher, final Predicate<String> signatureMatcher) {
-        gain(Server.class).addLastPre(msp(methodMatcher, signatureMatcher), pre);
-    }
-
-    public static void addPostFirst(final Post post, final Predicate<String> methodMatcher, final Predicate<String> signatureMatcher) {
-        gain(Server.class).addFirstPost(msp(methodMatcher, signatureMatcher), post);
-    }
-
-    public static void addPostLast(final Post post, final Predicate<String> methodMatcher, final Predicate<String> signatureMatcher) {
-        gain(Server.class).addLastPost(msp(methodMatcher, signatureMatcher), post);
-    }
-
-    private static BiPredicate<String, String> msp(final Predicate<String> methodMatcher, final Predicate<String> signatureMatcher) {
-        return (method, signature) -> (methodMatcher == null || methodMatcher.test(method)) && (signatureMatcher == null || signatureMatcher.test(signature));
     }
 
     public static void endpoints(final Route... routes) {
@@ -183,6 +135,38 @@ public final class DI {
 
     public static <A> A gain(final String named, final Class<A> clas) {
         return ref(named).gainInternal(clas, Collections.emptyList());
+    }
+
+    public static void hikariDataSource(final String name, final HikariConfig config) {
+        try {
+            final Configuration cfg = new Configuration(new Environment.Builder(notNull(name))
+                    .transactionFactory(new JdbcTransactionFactory())
+                    .dataSource(new HikariDataSource(config))
+                    .build());
+
+            final SqlSessionFactory factory = new SqlSessionFactoryBuilder().build(cfg);
+
+            bindProvider(name, Configuration.class, () -> cfg);
+            bindProvider(name, SqlSessionManager.class, () -> SqlSessionManager.newInstance(factory));
+            bind(name, SqlSessionFactory.class, SqlSessionManager.class);
+        } catch (final Exception e) {
+            logger.error("Hikari DataSource init failed :: " + e.getMessage(), e);
+            unhikari(name);
+        }
+    }
+
+    public static void shutName(final String name) {
+        if (isEmpty(name))
+            return;
+
+        refMap.remove(name);
+    }
+
+    public static void unhikari(final String name) {
+        initRef(name);
+        unbind(name, SqlSessionFactory.class);
+        unbind(name, SqlSessionManager.class);
+        unbind(name, Configuration.class);
     }
 
     private synchronized void unbind0(final Class<?> type) {
@@ -355,4 +339,6 @@ public final class DI {
 
         return constructor.get();
     }
+
+
 }

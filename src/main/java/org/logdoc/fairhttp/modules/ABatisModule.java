@@ -2,19 +2,10 @@ package org.logdoc.fairhttp.modules;
 
 import com.typesafe.config.Config;
 import com.zaxxer.hikari.HikariConfig;
-import com.zaxxer.hikari.HikariDataSource;
-import org.apache.ibatis.mapping.Environment;
 import org.apache.ibatis.session.Configuration;
-import org.apache.ibatis.session.SqlSessionFactory;
-import org.apache.ibatis.session.SqlSessionFactoryBuilder;
-import org.apache.ibatis.session.SqlSessionManager;
-import org.apache.ibatis.transaction.TransactionFactory;
-import org.apache.ibatis.transaction.jdbc.JdbcTransactionFactory;
 import org.logdoc.fairhttp.service.DI;
 import org.logdoc.fairhttp.service.api.helpers.Preloaded;
 import org.logdoc.fairhttp.service.tools.MapperProvider;
-
-import javax.sql.DataSource;
 
 import static org.logdoc.helpers.Texts.notNull;
 
@@ -85,16 +76,7 @@ public abstract class ABatisModule implements Preloaded {
             hikariConfig.validate();
         }
 
-        final DataSource dataSource = new HikariDataSource(hikariConfig);
-        final TransactionFactory transactionFactory = new JdbcTransactionFactory();
-        final Environment environment = new Environment("development", transactionFactory, dataSource);
-
-        final Configuration cfg = new Configuration(environment);
-        final SqlSessionFactory factory = new SqlSessionFactoryBuilder().build(cfg);
-
-        DI.bindProvider(name, Configuration.class, () -> cfg);
-        DI.bindProvider(name, SqlSessionManager.class, () -> SqlSessionManager.newInstance(factory));
-        DI.bind(name, SqlSessionFactory.class, SqlSessionManager.class);
+        DI.hikariDataSource(name, hikariConfig);
     }
 
     public abstract void init();
@@ -155,7 +137,7 @@ public abstract class ABatisModule implements Preloaded {
         addMapper(null, clas);
     }
 
-    protected final  <A> void addMapper(final String named, final Class<A> clas) {
+    protected final <A> void addMapper(final String named, final Class<A> clas) {
         if (notNull(named).equals("default")) {
             addMapper(null, clas);
             return;
