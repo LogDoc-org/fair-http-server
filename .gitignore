@@ -34,3 +34,4 @@ build/
 ### Mac OS ###
 .DS_Store
 !/.gitignore
+!/src/main/java/org/logdoc/fairhttp/service/Test.java
