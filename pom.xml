@@ -39,8 +39,8 @@
         <maven.compiler.target>11</maven.compiler.target>
 
         <plugin.nexus.staging.ver>1.6.12</plugin.nexus.staging.ver>
-        <plugin.maven.source.ver>3.2.1</plugin.maven.source.ver>
-        <plugin.maven.javadoc.ver>3.3.1</plugin.maven.javadoc.ver>
+        <plugin.maven.source.ver>3.3.0</plugin.maven.source.ver>
+        <plugin.maven.javadoc.ver>3.3.0</plugin.maven.javadoc.ver>
         <plugin.maven.gpg.ver>3.0.1</plugin.maven.gpg.ver>
     </properties>
 
@@ -131,7 +131,7 @@
                         <execution>
                             <id>attach-sources</id>
                             <goals>
-                                <goal>jar</goal>
+                                <goal>jar-no-fork</goal>
                             </goals>
                         </execution>
                     </executions>
