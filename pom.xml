@@ -29,7 +29,7 @@
 
     <scm>
         <connection>scm:git:git://github.com/LogDoc-org/fair-http-server.git</connection>
-        <developerConnection>scm:git:ssh://github.com/LogDoc-org/fair-http-server.git</developerConnection>
+        <developerConnection>scm:git:ssh://git@github.com/LogDoc-org/fair-http-server.git</developerConnection>
         <url>https://github.com/LogDoc-org/fair-http-server</url>
       <tag>fair-http-server-1.2.13</tag>
   </scm>
