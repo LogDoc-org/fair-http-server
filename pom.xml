@@ -4,7 +4,7 @@
 
     <groupId>org.logdoc</groupId>
     <artifactId>fair-http-server</artifactId>
-    <version>1.2.13-SNAPSHOT</version>
+    <version>1.2.13</version>
 
     <name>Logdoc FairHTTP server</name>
     <description>LogDoc.org project http server/app engine</description>
@@ -31,7 +31,8 @@
         <connection>scm:git:git://github.com/LogDoc-org/fair-http-server.git</connection>
         <developerConnection>scm:git:ssh://github.com:LogDoc-org/fair-http-server.git</developerConnection>
         <url>https://github.com/LogDoc-org/fair-http-server</url>
-    </scm>
+      <tag>fair-http-server-1.2.13</tag>
+  </scm>
 
     <properties>
         <nexus.staging.maven.plugin.version>1.6.7</nexus.staging.maven.plugin.version>
