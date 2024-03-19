@@ -4,7 +4,7 @@
 
     <groupId>org.logdoc</groupId>
     <artifactId>fair-http-server</artifactId>
-    <version>1.2.13</version>
+    <version>1.2.13-SNAPSHOT</version>
 
     <name>Logdoc FairHTTP server</name>
     <description>LogDoc.org project http server/app engine</description>
