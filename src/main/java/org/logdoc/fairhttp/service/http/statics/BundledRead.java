@@ -69,6 +69,11 @@ public class BundledRead extends StaticRead {
     }
 
     @Override
+    public boolean canProcess(final String path) {
+        return resolve(path).exists;
+    }
+
+    @Override
     public Response apply(final String webpath) {
         final FRes p = resolve(webpath);
 

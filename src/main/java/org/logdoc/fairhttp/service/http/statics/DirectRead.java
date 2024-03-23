@@ -73,6 +73,16 @@ public class DirectRead extends StaticRead {
     }
 
     @Override
+    public boolean canProcess(String webpath) {
+        webpath = webpath.replaceAll("/{2,}", "/");
+        if (webpath.startsWith("/"))
+            webpath = webpath.substring(1);
+        webpath = webpath.replace('/', File.separatorChar);
+
+        return Files.exists(root.resolve(webpath));
+    }
+
+    @Override
     public Response apply(String webpath) {
         webpath = webpath.replaceAll("/{2,}", "/");
         if (webpath.startsWith("/"))

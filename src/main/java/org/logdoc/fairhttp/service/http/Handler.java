@@ -70,7 +70,7 @@ public class Handler extends Thread {
             if (i > 0) {
                 String data = "";
                 try { data = " ::> " + new String(Arrays.copyOfRange(head, 0, i), StandardCharsets.UTF_8); } catch (final Exception ignore) { }
-                logger.error(id + " :: Cant read request headers, timed out after " + i + " bytes. Drop connection." + data);
+                logger.error(id + " :: Cant read request headers, timed out after " + i + " bytes. Drop connection. " + data);
             }
 
             close();

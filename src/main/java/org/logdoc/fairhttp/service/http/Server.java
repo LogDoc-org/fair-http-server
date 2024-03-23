@@ -5,6 +5,7 @@ import org.logdoc.fairhttp.service.api.helpers.Route;
 import org.logdoc.fairhttp.service.api.helpers.endpoint.Endpoint;
 import org.logdoc.fairhttp.service.api.helpers.endpoint.Signature;
 import org.logdoc.fairhttp.service.api.helpers.endpoint.invokers.*;
+import org.logdoc.fairhttp.service.http.statics.AssetsRead;
 import org.logdoc.fairhttp.service.http.statics.BundledRead;
 import org.logdoc.fairhttp.service.http.statics.DirectRead;
 import org.logdoc.fairhttp.service.http.statics.NoStatics;
@@ -36,15 +37,16 @@ import static org.logdoc.helpers.Texts.notNull;
  * 03.02.2023 17:39
  * FairHttpService ☭ sweat and blood
  */
-public class Server {
+public class Server implements RCBackup {
     private static final Logger logger = LoggerFactory.getLogger(Server.class);
     private static Server backRef = null;
     private final SortedSet<Endpoint> endpoints;
     private final int port, maxRequestBytes;
     private final int readTimeout, execTimeout;
-    private final Function<String, Response> assets;
+    private final AssetsRead assets;
     private final CORS cors;
     private final Map<Integer, String> maps;
+    private final RCCycler cycler;
     private Function<Throwable, Response> errorHandler;
 
     public Server(final int port, final int maxRequestBytes) { // minimal
@@ -64,6 +66,8 @@ public class Server {
 
             return throwable == null ? Response.ServerError() : Response.ServerError(throwable.getMessage());
         };
+
+        cycler = new RCCycler(1024 * 128, Executors.newCachedThreadPool());
     }
 
     public Server(final Config config) {
@@ -85,7 +89,7 @@ public class Server {
         final Config staticsCfg = ConfigTools.sureConf(config, "fair.http.statics");
         final String dir = staticsCfg != null && staticsCfg.hasPath("root") && !staticsCfg.getIsNull("root") ? notNull(staticsCfg.getString("root")) : null;
 
-        Function<String, Response> assets0 = new NoStatics();
+        AssetsRead assets0 = new NoStatics();
 
         try {
             if (!isEmpty(dir)) {
@@ -139,18 +143,17 @@ public class Server {
         assets = assets0;
 
         cors = new CORS(config);
+
+        cycler = new RCCycler(1024 * 128, Executors.newCachedThreadPool());
     }
 
     public void start() {
         new Thread(() -> {
             try (final ServerSocket socket = new ServerSocket(port)) {
                 Socket child;
-                do {
-                    child = socket.accept();
 
-                    if (child != null)
-                        new Handler(child, this, maxRequestBytes, readTimeout).start();
-                } while (child != null);
+                while ((child = socket.accept()) != null)
+                    cycler.addRc(new RCWrap(child, maxRequestBytes, readTimeout, execTimeout, this));
             } catch (final Exception e) {
                 logger.error(e.getMessage(), e);
                 System.exit(-1);
@@ -169,6 +172,24 @@ public class Server {
         } catch (final Exception e) {
             logger.error("Cant get local host: " + e.getMessage(), e);
         }
+    }
+
+    @Override
+    public boolean canProcess(final RequestId id) {
+        final Iterator<Endpoint> i = endpoints.iterator();
+        Pair<Boolean, Boolean> reply
+
+        while (i.hasNext()) {
+            reply = i.next().match(id.method, id.path);
+
+            if (reply.first && reply.second)
+                return true;
+
+            if (reply.second && id.method.equals("OPTIONS"))
+                return true;
+        }
+
+        return id.method.equals("GET") && (maps.containsKey(404) || assets.canProcess(id.path));
     }
 
     void handleRequest(final Request request, final Consumer<Response> responseConsumer) {
@@ -246,20 +267,12 @@ public class Server {
     }
 
     public synchronized boolean removeEndpoint(final String method, final String signature) {
-        for (final Endpoint e : endpoints)
-            if (e.equals(method, signature)) {
-                endpoints.remove(e);
-                return true;
-            }
-
-        return false;
+        return endpoints.removeIf(e -> e.equals(method, signature));
     }
 
     @SuppressWarnings({"unchecked", "UnusedReturnValue"})
-    public synchronized boolean addEndpoint(final Route endpoint) {
-        Endpoint ep;
-
-        if (endpoints.add((ep = new Endpoint(endpoint.method, new Signature(endpoint.endpoint),
+    public synchronized void addEndpoint(final Route endpoint) {
+        if (endpoints.add(new Endpoint(endpoint.method, new Signature(endpoint.endpoint),
                 endpoint.indirect
                         ? (req, pathMap) -> {
                     try {
@@ -294,19 +307,13 @@ public class Server {
                     } catch (final Exception ex) {
                         return errorHandler.apply(ex);
                     }
-                })))) {
-            logger.info("Added endpoint: " + ep);
-
-            return true;
-        } else
-            return false;
+                })))
+            logger.info("Added endpoint: " + endpoint.method + "\t" + endpoint.endpoint);
     }
 
-    public void setupErrorHandler(final Function<Throwable, Response> errorHandler) {
+    public synchronized void setupErrorHandler(final Function<Throwable, Response> errorHandler) {
         if (errorHandler != null)
-            synchronized (this) {
-                this.errorHandler = errorHandler;
-            }
+            this.errorHandler = errorHandler;
     }
 
     public Response errorAsResponse(final String error) {

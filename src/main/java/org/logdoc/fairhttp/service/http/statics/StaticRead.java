@@ -29,7 +29,7 @@ import static org.logdoc.helpers.Texts.isEmpty;
  * 25.04.2023 12:14
  * fair-http-server ☭ sweat and blood
  */
-abstract class StaticRead implements Function<String, Response> {
+abstract class StaticRead implements AssetsRead {
     protected final static Logger logger = LoggerFactory.getLogger(StaticRead.class);
     private static final DateTimeFormatter format = DateTimeFormatter.ofPattern("dd-MM-yyyy HH:mm");
     private final static String autoIdxPrm = "auto_index", indexesPrm = "index_files", cachePrm = "memory_cache", mimesPrm = "mime_types",
