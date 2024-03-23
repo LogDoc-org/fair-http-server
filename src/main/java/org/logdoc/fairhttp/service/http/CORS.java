@@ -5,6 +5,7 @@ import org.logdoc.fairhttp.service.api.helpers.Headers;
 
 import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -69,11 +70,11 @@ class CORS {
             }
     }
 
-    Response wrap(final Request request, Response response) {
+    Response wrap(final Map<String, String> headers, Response response) {
         if (multiOrigins)
             response.header("Vary", "origin"); // multiple origins must be noted
 
-        if ((!request.hasHeader(Headers.Auth) && !request.hasHeader(Headers.RequestCookies))
+        if ((!headers.containsKey(Headers.Auth) && !headers.containsKey(Headers.RequestCookies))
                 || noWilds // no wildcards
         ) { // particular values or wilds allowed
             return response
@@ -84,17 +85,17 @@ class CORS {
                     .withHeader(CredsReply, allowCreds);
         }
 
-        if (request.hasHeader(MethodRequest))
-            response.header(MethodReply, methodsStr.equals("*") ? request.header(MethodRequest) : methodsStr);
+        if (headers.containsKey(MethodRequest))
+            response.header(MethodReply, methodsStr.equals("*") ? headers.get(MethodRequest) : methodsStr);
 
-        if (request.hasHeader(HeadersRequest))
-            response.header(HeadersReply, headersStr.equals("*") ? request.header(HeadersRequest) : headersStr);
+        if (headers.containsKey(HeadersRequest))
+            response.header(HeadersReply, headersStr.equals("*") ? headers.get(HeadersRequest) : headersStr);
 
         if (!exposeStr.equals("*"))
             response.header(ExposeReply, exposeStr);
 
         return response
-                .withHeader(OriginReply, originStr.equals("*") ? request.header(OriginRequest) : originStr)
+                .withHeader(OriginReply, originStr.equals("*") ? headers.get(OriginRequest) : originStr)
                 .withHeader(CredsReply, allowCreds);
     }
 }

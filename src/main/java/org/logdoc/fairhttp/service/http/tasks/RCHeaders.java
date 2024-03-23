@@ -30,6 +30,16 @@ public class RCHeaders implements Runnable {
                 public String get(final Object key) {
                     return super.get(notNull(key).toUpperCase(Locale.ROOT));
                 }
+
+                @Override
+                public boolean containsKey(final Object key) {
+                    return super.containsKey(notNull(key).toUpperCase(Locale.ROOT));
+                }
+
+                @Override
+                public String getOrDefault(final Object key, final String defaultValue) {
+                    return super.getOrDefault(notNull(key).toUpperCase(Locale.ROOT), defaultValue);
+                }
             };
             final byte[] buf = new byte[8192];
             final InputStream is = socket.getInputStream();

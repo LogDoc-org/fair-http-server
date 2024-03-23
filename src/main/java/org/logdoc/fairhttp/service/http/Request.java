@@ -1,26 +1,34 @@
 package org.logdoc.fairhttp.service.http;
 
 import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.node.MissingNode;
+import org.logdoc.fairhttp.errors.BodyReadError;
 import org.logdoc.fairhttp.service.api.helpers.Headers;
 import org.logdoc.fairhttp.service.tools.*;
 import org.logdoc.fairhttp.service.tools.websocket.extension.IExtension;
 import org.logdoc.fairhttp.service.tools.websocket.protocol.IProtocol;
 import org.logdoc.helpers.std.MimeType;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.net.Socket;
 import java.net.SocketAddress;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.*;
-import java.util.function.Function;
 import java.util.regex.Pattern;
+import java.util.zip.GZIPInputStream;
+import java.util.zip.InflaterInputStream;
 
 import static org.logdoc.fairhttp.service.tools.websocket.protocol.IProtocol.WS_VERSION;
+import static org.logdoc.helpers.Digits.getInt;
 import static org.logdoc.helpers.Texts.isEmpty;
 import static org.logdoc.helpers.Texts.notNull;
-import static org.logdoc.helpers.std.MimeTypes.*;
+import static org.logdoc.helpers.std.MimeTypes.TEXTPLAIN;
 
 /**
  * @author Denis Danilin | me@loslobos.ru
@@ -28,6 +36,7 @@ import static org.logdoc.helpers.std.MimeTypes.*;
  * fair-http-server ☭ sweat and blood
  */
 public class Request extends MapAttributed {
+    private static final Logger logger = LoggerFactory.getLogger(Request.class);
     private static final byte CR = 0x0D, LF = 0x0A, DASH = 0x2D;
 
     public static final byte[] streamEnd = {DASH, DASH},
@@ -35,20 +44,27 @@ public class Request extends MapAttributed {
             fieldSeparator = {CR, LF},
             boundaryPrefix = {CR, LF, DASH, DASH};
 
-    private final byte[] rawHead;
-    private final Function<Request, byte[]> bodySupplier;
-    private final SocketAddress remote;
-
-    private Map<String, String> q, h, c;
-    private String m, p, u;
-    private String[] hz;
-    private Body b;
+    private final RequestId id;
+    private final Map<String, String> headers;
+    private final Socket socket;
+    private final int maxRequestSize;
+    private Map<String, String> c;
     private MimeType t;
+    private int contentLength;
+    private boolean chunked;
+    private boolean gzip;
+    private boolean deflate;
+    private byte[] body;
+    private String bs;
+    private JsonNode bj;
+    private Form bf;
+    private MultiForm bm;
 
-    Request(final SocketAddress remote, final byte[] rawHead, final Function<Request, byte[]> bodySupplier) {
-        this.rawHead = rawHead;
-        this.remote = remote;
-        this.bodySupplier = bodySupplier;
+    Request(final RequestId id, final Map<String, String> headers, final Socket socket, final int maxRequestSize) {
+        this.id = id;
+        this.headers = headers;
+        this.socket = socket;
+        this.maxRequestSize = maxRequestSize;
     }
 
     private static String stringQuotes(String value) {
@@ -82,138 +98,272 @@ public class Request extends MapAttributed {
     }
 
     public SocketAddress getRemote() {
-        return remote;
+        return socket.getRemoteSocketAddress();
     }
 
     public String method() {
-        if (m == null)
-            makeFirstLine();
-
-        return m;
+        return id.method;
     }
 
     public String path() {
-        if (p == null)
-            makeFirstLine();
-
-        return p;
+        return id.path;
     }
 
     public String uri() {
-        if (u == null)
-            makeFirstLine();
-
-        return u;
-    }
-
-    public Map<String, String> queryMap() {
-        if (q == null)
-            makeFirstLine();
-
-        return q;
+        return id.uri;
     }
 
     public String queryParam(final String name) {
-        return queryMap().get(name);
-    }
-
-    public Map<String, String> headersMap() {
-        if (h == null)
-            synchronized (this) {
-                final Map<String, String> hm = new HashMap<>(8);
-                String name;
-
-                for (int i = 1, idx; i < heads().length; i++) {
-                    if ((idx = heads()[i].indexOf(':')) != -1) {
-                        name = notNull(heads()[i].substring(0, idx));
-
-                        if (!name.isEmpty())
-                            hm.put(name.toUpperCase(Locale.ROOT), notNull(heads()[i].substring(idx + 1)));
-                    }
-                }
-
-                h = Collections.unmodifiableMap(hm);
-            }
-
-        return h;
+        return id.query(name);
     }
 
     public String header(final String name) {
-        return headersMap().get(notNull(name).toUpperCase(Locale.ROOT));
+        return headers.get(name);
     }
 
-    Request remap(final String remapping) {
-        u = remapping;
+    private void calcBody() {
+        contentLength = getInt(headers.get(Headers.ContentLength));
 
-        ofPath();
+        final String te = notNull(headers.get(Headers.TransferEncoding));
 
-        return this;
+        chunked = te.contains("chunked");
+        gzip = te.contains("gzip");
+        deflate = te.contains("deflate");
     }
 
-    private void ofPath() {
-        if (u.indexOf('?') == -1) {
-            p = u;
-            q = Collections.emptyMap();
-        } else {
-            p = u.substring(0, u.indexOf('?'));
+    private InputStream getIs() throws IOException {
+        final InputStream is = socket.getInputStream();
 
-            final Map<String, String> qm = new HashMap<>(4);
-            Arrays.stream(u.substring(u.indexOf('?') + 1).split(Pattern.quote("&")))
-                    .map(pair -> pair.split(Pattern.quote("=")))
-                    .filter(pair -> pair.length > 1)
-                    .forEach(kv -> {
-                        String v = null;
-                        try {v = URLDecoder.decode(kv[1], StandardCharsets.UTF_8);} catch (final IllegalArgumentException ignore) {
-                            v = URLDecoder.decode(kv[1], StandardCharsets.US_ASCII);
-                        } catch (final Exception ignore) {}
+        if (gzip)
+            return new GZIPInputStream(is);
 
-                        if (v != null)
-                            qm.put(kv[0], v);
-                    });
+        if (deflate)
+            return new InflaterInputStream(is);
 
-            q = Collections.unmodifiableMap(qm);
+        return is;
+    }
+
+    public byte[] bodyBytes() throws BodyReadError {
+        if (body != null)
+            return body;
+
+        calcBody();
+
+        if (chunked)
+            return (body = readChunks());
+
+        if (contentLength <= 0)
+            return (body = new byte[0]);
+
+        body = new byte[contentLength];
+        int total = 0, read;
+
+        try (final InputStream is = getIs()) {
+            while (total != contentLength) {
+                read = is.read(body, total, contentLength - total);
+
+                if (read == -1)
+                    throw new BodyReadError("Cant read " + contentLength + " bytes of body, got only " + total);
+
+                total += read;
+            }
+
+            return body;
+        } catch (final BodyReadError be) {
+            throw be;
+        } catch (final Exception e) {
+            throw new BodyReadError(e);
         }
     }
 
-    private synchronized void makeFirstLine() {
-        synchronized (this) {
-            final String[] parts = heads()[0].split("\\s", 3);
-            m = notNull(parts[0]).toUpperCase();
-            u = notNull(parts[1]);
+    public String bodyString() throws BodyReadError {
+        if (bs != null)
+            return bs;
 
-            ofPath();
-        }
+        return (bs = new String(bodyBytes(), StandardCharsets.UTF_8));
     }
 
-    private String[] heads() {
-        if (hz == null)
-            synchronized (this) {
-                hz = new String(rawHead, StandardCharsets.UTF_8).split("\n");
-            }
+    public JsonNode bodyJson() throws BodyReadError {
+        if (bj != null)
+            return bj;
 
-        return hz;
+        return (bj = Json.parse(bodyBytes()));
     }
 
-    public Body body() {
-        if (b == null)
-            synchronized (this) {
-                b = new Body(bodySupplier.apply(this), contentType());
-            }
+    public Form bodyForm() throws BodyReadError {
+        if (bf != null)
+            return bf;
 
-        return b;
+        bf = new Form();
+
+        Arrays.stream(bs.split(Pattern.quote("&")))
+                .map(pair -> pair.split(Pattern.quote("=")))
+                .forEach(kv -> {
+                    final String v = URLDecoder.decode(kv[1], StandardCharsets.UTF_8);
+
+                    if (isEmpty(v)) {
+                        if (!bf.containsKey(kv[0]))
+                            bf.put(kv[0], new ArrayList<>(2));
+
+                        bf.get(kv[0]).add(v);
+                    }
+                });
+
+        return bf;
     }
 
-    private MimeType contentType() {
-        if (t == null)
-            synchronized (this) {
-                try {
-                    t = new MimeType(header(Headers.ContentType));
-                } catch (Exception e) {
-                    t = BINARY;
+    public MultiForm bodyMultiForm() throws BodyReadError {
+        if (bm != null)
+            return bm;
+
+        try {
+            bm = new MultiForm();
+            final byte[] bnd = new MimeType(header(Headers.ContentType)).getParameter("boundary").getBytes(StandardCharsets.ISO_8859_1);
+            boolean done = false;
+            int i = 0;
+
+            while (!done) {
+                final Map<String, String> partHeaders = new HashMap<>(8) {
+                    @Override
+                    public String put(final String key, final String value) {
+                        return super.put(key.toUpperCase(), value);
+                    }
+
+                    @Override
+                    public String get(final Object key) {
+                        return super.get(String.valueOf(key).toUpperCase());
+                    }
+                };
+
+                i = indexOf(body, bnd, i);
+
+                if (i == -1)
+                    break;
+
+                i += bnd.length;
+
+                final int hdrs = indexOf(body, headerSeparator, i + 1);
+
+                if (hdrs > i) {
+                    int hdr;
+
+                    while ((hdr = indexOf(body, fieldSeparator, i)) <= hdrs) {
+                        final String hs = notNull(new String(Arrays.copyOfRange(body, i, hdr), StandardCharsets.UTF_8));
+                        final int sep = hs.indexOf(':');
+
+                        if (sep != -1)
+                            partHeaders.put(notNull(hs.substring(0, sep)), notNull(hs.substring(sep + 1)));
+
+                        i = hdr + fieldSeparator.length;
+                    }
+
+                    i += 2;
+
+                    int till = indexOf(body, boundaryPrefix, i);
+
+                    if (till == -1) {
+                        done = true;
+                        till = indexOf(body, streamEnd, i);
+                    }
+
+                    final byte[] pb = Arrays.copyOfRange(body, i, till);
+                    i = till;
+
+                    final String cd;
+                    if ((cd = partHeaders.get(Headers.ContentDisposition)) != null) {
+                        MimeType cType = TEXTPLAIN;
+                        try {cType = new MimeType(partHeaders.get(Headers.ContentType));} catch (final Exception ignore) {}
+
+                        String fileName = null, fieldName = null;
+
+                        final String cdl = cd.trim().toLowerCase();
+                        if (cdl.startsWith(Headers.FormData) || cdl.startsWith(Headers.Attachment)) {
+                            try {
+                                final ParameterParser parser = new ParameterParser();
+                                parser.setLowerCaseNames();
+
+                                final Map<String, String> parameters = parser.parse(cd, ';');
+
+                                fileName = parameters.get("filename");
+                                fieldName = parameters.get("name");
+                            } catch (final Exception ignore) {}
+                        }
+
+                        if (isEmpty(fieldName))
+                            continue;
+
+                        if (!isEmpty(fileName))
+                            bm.fileData(fieldName, fileName, pb, cType);
+                        else if (cType.getBaseType().startsWith("text/"))
+                            bm.textData(fieldName, new String(pb, StandardCharsets.UTF_8));
+                        else
+                           bm.binData(fieldName, pb, partHeaders);
+                    }
                 }
             }
 
-        return t;
+            return bm;
+        } catch (final BodyReadError e) {
+            throw e;
+        } catch (final Exception e) {
+            throw new BodyReadError(e);
+        }
+    }
+
+    private int indexOf(final byte[] data, final byte[] match, final int from) {
+        MAIN:
+        for (int i = from; i < data.length - match.length; i++) {
+            for (int j = 0; j < match.length; j++)
+                if (data[i + j] != match[j])
+                    continue MAIN;
+
+            return i;
+        }
+
+        return -1;
+    }
+
+    private byte[] readChunks() throws BodyReadError {
+        try {
+            try (final ByteArrayOutputStream bos = new ByteArrayOutputStream(16 * 1024); final InputStream is = getIs()) {
+                int chunkSize, sum = 0;
+
+                do {
+                    chunkSize = getChunkSize(is);
+
+                    if (chunkSize > 0) {
+                        sum += chunkSize;
+
+                        if (maxRequestSize > 0 && sum > maxRequestSize)
+                            throw new IllegalStateException("Max request size is exceeded: " + maxRequestSize);
+
+                        for (int i = 0; i < chunkSize; i++) bos.write(is.read());
+                    }
+                } while (chunkSize > 0);
+
+                bos.flush();
+                return bos.toByteArray();
+            }
+
+        } catch (final Exception e) {
+            logger.error(e.getMessage(), e);
+            throw new BodyReadError(e);
+        }
+    }
+
+    private int getChunkSize(final InputStream is) throws IOException {
+        int b;
+
+        try (final ByteArrayOutputStream os = new ByteArrayOutputStream(8)) {
+            do {
+                b = is.read();
+
+                if (Character.digit(b, 16) != -1)
+                    os.write(b);
+            } while (b != '\n');
+
+            return Integer.parseInt(os.toString(StandardCharsets.US_ASCII), 16);
+        }
     }
 
     public boolean hasHeader(final String name) {
@@ -229,7 +379,7 @@ public class Request extends MapAttributed {
             synchronized (this) {
                 final Map<String, String> m = new HashMap<>();
 
-                String v = header(Headers.RequestCookies);
+                final String v = header(Headers.RequestCookies);
 
                 if (!isEmpty(v))
                     Arrays.stream(v.split(";"))
@@ -247,226 +397,7 @@ public class Request extends MapAttributed {
         return c;
     }
 
-    public <T> T map(final Class<? extends T> klass) {return body().map(klass);}
-
-    public String asText() {return body().asText();}
-
-    public byte[] asBytes() {return body().asBytes();}
-
-    public JsonNode asJson() {return body().asJson();}
-
-    public MultiForm asMultipart() {return body().asMultipart();}
-
-    public String formField(final String name) {return body().formField(name);}
-
-    public Form asForm() {return body().asForm();}
-
-    public static class Body {
-        private final MimeType contentType;
-        private final byte[] data;
-        private Form f;
-        private MultiForm m;
-        private JsonNode j;
-
-        private Body(final byte[] data, final MimeType contentType) {
-            this.data = data;
-            this.contentType = contentType;
-        }
-
-        public String asText() {
-            return asText(false);
-        }
-
-        public String asText(final boolean forced) {
-            return data != null && data.length > 0 && (forced || contentTypeMatch(TEXTALL))
-                    ? new String(data, StandardCharsets.UTF_8)
-                    : null;
-        }
-
-        public byte[] asBytes() {
-            return data == null ? new byte[0] : Arrays.copyOf(data, data.length);
-        }
-
-        public JsonNode asJson() {
-            return asJson(false);
-        }
-
-        public JsonNode asJson(final boolean forced) {
-            if (j == null && (forced || contentTypeMatch(JSON)))
-                synchronized (this) {
-                    j = Json.parse(data);
-                }
-
-            return j;
-        }
-
-        public <T> T map(final Class<? extends T> klass) {
-            final JsonNode jn = asJson();
-
-            return jn == null || jn instanceof MissingNode ? null : Json.fromJson(jn, klass);
-        }
-
-        public MultiForm asMultipart() {
-            return asMultipart(false);
-        }
-
-        public MultiForm asMultipart(final boolean forced) {
-            if (m == null && data != null && data.length > 0 && (forced || contentTypeMatch(MULTIPART)))
-                synchronized (this) {
-                    m = new MultiForm();
-                    final byte[] bnd = contentType.getParameter("boundary").getBytes(StandardCharsets.ISO_8859_1);
-                    boolean done = false;
-                    int i = 0;
-
-                    while (!done) {
-                        final Map<String, String> partHeaders = new HashMap<>(8) {
-                            @Override
-                            public String put(final String key, final String value) {
-                                return super.put(key.toUpperCase(), value);
-                            }
-
-                            @Override
-                            public String get(final Object key) {
-                                return super.get(String.valueOf(key).toUpperCase());
-                            }
-                        };
-
-                        i = indexOf(data, bnd, i);
-
-                        if (i == -1)
-                            break;
-
-                        i += bnd.length;
-
-                        final int hdrs = indexOf(data, headerSeparator, i + 1);
-
-                        if (hdrs > i) {
-                            int hdr;
-
-                            while ((hdr = indexOf(data, fieldSeparator, i)) <= hdrs) {
-                                final String hs = notNull(new String(Arrays.copyOfRange(data, i, hdr), StandardCharsets.UTF_8));
-                                final int sep = hs.indexOf(':');
-
-                                if (sep != -1)
-                                    partHeaders.put(notNull(hs.substring(0, sep)), notNull(hs.substring(sep + 1)));
-
-                                i = hdr + fieldSeparator.length;
-                            }
-
-                            i += 2;
-
-                            int till = indexOf(data, boundaryPrefix, i);
-
-                            if (till == -1) {
-                                done = true;
-                                till = indexOf(data, streamEnd, i);
-                            }
-
-                            final byte[] pb = Arrays.copyOfRange(data, i, till);
-                            i = till;
-
-                            final String cd;
-                            if ((cd = partHeaders.get(Headers.ContentDisposition)) != null) {
-                                MimeType cType = TEXTPLAIN;
-                                try {cType = new MimeType(partHeaders.get(Headers.ContentType));} catch (final Exception ignore) {}
-
-                                String fileName = null, fieldName = null;
-
-                                final String cdl = cd.trim().toLowerCase();
-                                if (cdl.startsWith(Headers.FormData) || cdl.startsWith(Headers.Attachment)) {
-                                    try {
-                                        final ParameterParser parser = new ParameterParser();
-                                        parser.setLowerCaseNames();
-
-                                        final Map<String, String> parameters = parser.parse(cd, ';');
-
-                                        fileName = parameters.get("filename");
-                                        fieldName = parameters.get("name");
-                                    } catch (final Exception ignore) {}
-                                }
-
-                                if (isEmpty(fieldName))
-                                    continue;
-
-                                if (!isEmpty(fileName))
-                                    m.fileData(fieldName, fileName, pb, cType);
-                                else if (cType.getBaseType().startsWith("text/"))
-                                    m.textData(fieldName, new String(pb, StandardCharsets.UTF_8));
-                                else
-                                    m.binData(fieldName, pb, partHeaders);
-                            }
-                        }
-                    }
-                }
-
-            return m;
-        }
-
-        private int indexOf(final byte[] data, final byte[] match, final int from) {
-            MAIN:
-            for (int i = from; i < data.length - match.length; i++) {
-                for (int j = 0; j < match.length; j++)
-                    if (data[i + j] != match[j])
-                        continue MAIN;
-
-                return i;
-            }
-
-            return -1;
-        }
-
-        public String formField(final String name) {
-            if (isEmpty(name) || data == null || data.length == 0 || (!contentTypeMatch(FORM) && !contentTypeMatch(MULTIPART)))
-                return null;
-
-            if (contentTypeMatch(FORM)) {
-                asForm();
-
-                return f == null ? null : f.field(name);
-            }
-
-            asMultipart();
-
-            return m == null ? null : m.field(name);
-        }
-
-        public Form asForm() {
-            return asForm(false);
-        }
-
-        public Form asForm(final boolean forced) {
-            if (f == null && data != null && data.length > 0 && (forced || contentTypeMatch(FORM)))
-                synchronized (this) {
-                    f = new Form();
-                    final String fdata = new String(data, StandardCharsets.UTF_8);
-
-                    Arrays.stream(fdata.split(Pattern.quote("&")))
-                            .map(pair -> pair.split(Pattern.quote("=")))
-                            .forEach(kv -> {
-                                final String v = URLDecoder.decode(kv[1], StandardCharsets.UTF_8);
-
-                                if (isEmpty(v)) {
-                                    if (!f.containsKey(kv[0]))
-                                        f.put(kv[0], new ArrayList<>(2));
-
-                                    f.get(kv[0]).add(v);
-                                }
-                            });
-                }
-
-            return f;
-        }
-
-        private boolean contentTypeMatch(final MimeType expected) {
-            if (this.contentType == null)
-                return expected == null;
-
-            try {
-                return this.contentType.match(expected);
-            } catch (final Exception ignore) {
-            }
-
-            return false;
-        }
+    public <T> T jsonmap(final Class<? extends T> klass) throws BodyReadError {
+        return Json.fromJson(bodyJson(), klass);
     }
 }

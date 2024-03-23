@@ -4,25 +4,21 @@ import org.logdoc.fairhttp.service.api.helpers.Headers;
 import org.logdoc.fairhttp.service.http.tasks.RCHeaders;
 import org.logdoc.fairhttp.service.http.tasks.RCSignature;
 import org.logdoc.fairhttp.service.tools.ResourceConnect;
-import org.logdoc.fairhttp.service.tools.ScanBuf;
 import org.logdoc.helpers.Sporadics;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
-import java.io.InputStream;
-import java.io.OutputStream;
 import java.net.Socket;
-import java.util.HashMap;
+import java.net.SocketException;
 import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
-import java.util.concurrent.Callable;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Function;
 
 import static org.logdoc.helpers.Digits.getInt;
-import static org.logdoc.helpers.Texts.notNull;
+import static org.logdoc.helpers.Texts.isEmpty;
 
 /**
  * @author Denis Danilin | me@loslobos.ru
@@ -33,38 +29,20 @@ final class RCWrap implements ResourceConnect {
     private static final Logger logger = LoggerFactory.getLogger(RCWrap.class);
     private final UUID uuid;
     private final Socket socket;
-    private final InputStream is;
-    private final OutputStream os;
-    private final int maxRequestSize, readTimeout, execTimeout;
+    private final int maxRequestSize, readTimeout;
     private final RCBackup backup;
-    private final ScanBuf buf;
-    private final Map<String, String> headers;
 
-    private byte[] body = null;
-    private int totalRead;
-    private boolean want2read;
-    private String method, resource, proto;
-    private boolean headersAreDone;
-    private boolean promptIsDone;
     private Runnable task;
-    private int contentLength;
-    private boolean chunked;
-    private boolean gzip;
-    private boolean deflate;
+    private RequestId requestId;
 
-    RCWrap(final Socket socket, final int maxRequestSize, final int readTimeout, final int execTimeout, final RCBackup backup) throws IOException {
+    RCWrap(final Socket socket, final int maxRequestSize, final int readTimeout, final RCBackup backup) throws IOException {
         uuid = Sporadics.generateUuid();
         socket.setSoTimeout(readTimeout);
         this.socket = socket;
-        this.is = socket.getInputStream();
-        this.os = socket.getOutputStream();
         this.backup = backup;
-        this.headers = new HashMap<>(8);
 
         this.maxRequestSize = maxRequestSize;
         this.readTimeout = readTimeout;
-        this.execTimeout = execTimeout;
-        buf = new ScanBuf();
 
         final CompletableFuture<RequestId> getIdStage = new CompletableFuture<>();
         getIdStage.thenAccept(this::gotId);
@@ -73,22 +51,28 @@ final class RCWrap implements ResourceConnect {
         task = new RCSignature(socket, getIdStage);
     }
 
+    @Override
+    public Socket getInput() {
+        return socket;
+    }
+
     private <K> Function<Throwable, K> failed() {
         return e -> {
             logger.error("Stage failed: " + e.getMessage(), e);
-//            write(Response.ServerError(e.getMessage())); // todo
+            write(Response.ServerError(e.getMessage()));
             seppukku();
             return (K) null;
         };
     }
 
     private void seppukku() {
-        // todo
+        try { socket.close(); } catch (final Exception ignore) { }
+        backup.meDead(this);
     }
 
     private void gotId(final RequestId requestId) {
         if (!backup.canProcess(requestId)) {
-//            write(Response.NotFound()); // todo
+            write(Response.NotFound());
             seppukku();
             return;
         }
@@ -98,122 +82,67 @@ final class RCWrap implements ResourceConnect {
         getHeaders.exceptionally(failed());
 
         task = new RCHeaders(socket, getHeaders);
+
+        this.requestId = requestId;
     }
 
     private void gotHeaders(final Map<String, String> headers) {
+        task = null;
+
         if (headers == null || headers.isEmpty()) {
-//            write(Response.ClientError("Insufficient headers block")); // todo
+            write(Response.ClientError("Insufficient headers block"));
             seppukku();
             return;
         }
 
-        contentLength = getInt(headers.get(Headers.ContentLength));
-        final String te = notNull(headers.get(Headers.TransferEncoding));
+        if (getInt(headers.get(Headers.ContentLength)) > maxRequestSize) {
+            write(Response.ClientError("Max request size limit is exceeded: " + headers.get(Headers.ContentLength) + " / " + maxRequestSize));
+            seppukku();
+            return;
+        }
 
-        chunked = te.contains("chunked");
-        gzip = te.contains("gzip");
-        deflate = te.contains("deflate");
+        try {
+            socket.setSoTimeout(readTimeout);
+        } catch (final SocketException e) {
+            logger.error(e.getMessage(), e);
+            write(Response.ServerError("Internal error"));
+            seppukku();
+        }
 
-        backup.setWeAreReady(this);
+        backup.handleRequest(requestId, headers, this);
+    }
+
+
+    @Override
+    public void write(final Response response) {
+        if (response == null)
+            return;
+
+        if (response instanceof WebSocket) {
+            ((WebSocket) response).spinOff(socket);
+            return;
+        }
+
+        try {
+            write(response.asBytes());
+        } catch (final IOException e) {
+            logger.error("Cant write response: " + e.getMessage(), e);
+        } finally {
+            seppukku();
+        }
     }
 
     @Override
-    public void readUpTo(final int lim) {
-        if (!want2read)
+    public void write(final byte[] data) {
+        if (isEmpty(data))
             return;
 
         try {
-            byte[] data = new byte[lim];
-            boolean readed = false;
-            int off = 0, toRead = lim, read;
-
-            while (!readed) {
-                read = is.read(data, off, toRead);
-
-                if (read == -1) {
-                    want2read = false;
-                    readed = true;
-                } else {
-                    off += read;
-                    toRead -= read;
-
-                    readed = toRead == 0;
-
-                    totalRead += read;
-
-                    if (totalRead > maxRequestSize)
-                        throw new IllegalStateException("Request size exceeded limit " + maxRequestSize);
-                }
-            }
-
-            buf.append(data);
-
-            if (body == null) {
-                if (!headersAreDone) {
-                    if (!promptIsDone) {
-                        if (proto == null) {
-                            if (resource == null) {
-                                if (method == null) {
-                                    if (buf.missed((byte) ' '))
-                                        throw new IllegalStateException("Wrong HTTP request format");
-
-                                    method = buf.scanAndCut((byte) ' ').toString();
-
-                                    if (buf.missed((byte) ' '))
-                                        return;
-                                }
-
-                                if (buf.missed((byte) ' '))
-                                    return;
-
-                                resource = buf.scanAndCut((byte) ' ').toString();
-
-                                if (buf.missed((byte) ' '))
-                                    return;
-                            }
-
-                            if (buf.missed(sep))
-                                return;
-
-                            proto = buf.scanAndCut(sep).toString();
-                            promptIsDone = true;
-                        }
-
-                        if (buf.missed(sep))
-                            return;
-                    }
-
-                    if (buf.missed(sep))
-                        return;
-
-                    if (buf.missed((byte) ':'))
-                        throw new IllegalStateException("Wrong header? " + buf);
-
-                    headers.put(
-                            buf.scanAndCut((byte) ':').toString(),
-                            buf.scanAndCut(sep).toString()
-                    );
-
-                    if (buf.startsWith(sep)) {
-                        buf.skip(sep.length);
-                        headersAreDone = true;
-
-                        task = () -> {
-                            RCWrap.this.task = null;
-                            backup.warmUpRequest(RCWrap.this);
-                        };
-                    } else
-                        return;
-                }
-
-                if (want2read)
-                    return;
-
-                body = buf.asData();
-            }
+            socket.getOutputStream().write(data);
+            socket.getOutputStream().flush();
         } catch (final Exception e) {
-            logger.error("Socket #" + uuid + " read error: " + e.getMessage(), e);
-            backup.panic(e, this);
+            logger.error(e.getMessage(), e);
+            seppukku();
         }
     }
 

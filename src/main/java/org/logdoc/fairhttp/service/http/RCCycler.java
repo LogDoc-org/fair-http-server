@@ -18,12 +18,10 @@ public final class RCCycler implements Runnable {
     private final ExecutorService executor;
     private final Set<ResourceConnect> rcs;
     private final Semaphore semaphore;
-    private final int readMax;
 
-    RCCycler(final int readMaxAtOnce, final ExecutorService executor) {
+    RCCycler(final ExecutorService executor) {
         this.executor = executor;
         rcs = ConcurrentHashMap.newKeySet();
-        readMax = readMaxAtOnce;
 
         semaphore = new Semaphore(0, false);
     }

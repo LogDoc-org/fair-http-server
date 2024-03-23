@@ -11,6 +11,7 @@ import org.logdoc.fairhttp.service.http.statics.DirectRead;
 import org.logdoc.fairhttp.service.http.statics.NoStatics;
 import org.logdoc.fairhttp.service.tools.ConfigPath;
 import org.logdoc.fairhttp.service.tools.ConfigTools;
+import org.logdoc.fairhttp.service.tools.ResourceConnect;
 import org.logdoc.helpers.gears.Pair;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -23,7 +24,6 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.*;
 import java.util.concurrent.*;
-import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -67,7 +67,7 @@ public class Server implements RCBackup {
             return throwable == null ? Response.ServerError() : Response.ServerError(throwable.getMessage());
         };
 
-        cycler = new RCCycler(1024 * 128, Executors.newCachedThreadPool());
+        cycler = new RCCycler(Executors.newCachedThreadPool());
     }
 
     public Server(final Config config) {
@@ -144,7 +144,7 @@ public class Server implements RCBackup {
 
         cors = new CORS(config);
 
-        cycler = new RCCycler(1024 * 128, Executors.newCachedThreadPool());
+        cycler = new RCCycler(Executors.newCachedThreadPool());
     }
 
     public void start() {
@@ -153,7 +153,7 @@ public class Server implements RCBackup {
                 Socket child;
 
                 while ((child = socket.accept()) != null)
-                    cycler.addRc(new RCWrap(child, maxRequestBytes, readTimeout, execTimeout, this));
+                    cycler.addRc(new RCWrap(child, maxRequestBytes, readTimeout, this));
             } catch (final Exception e) {
                 logger.error(e.getMessage(), e);
                 System.exit(-1);
@@ -177,7 +177,7 @@ public class Server implements RCBackup {
     @Override
     public boolean canProcess(final RequestId id) {
         final Iterator<Endpoint> i = endpoints.iterator();
-        Pair<Boolean, Boolean> reply
+        Pair<Boolean, Boolean> reply;
 
         while (i.hasNext()) {
             reply = i.next().match(id.method, id.path);
@@ -192,46 +192,58 @@ public class Server implements RCBackup {
         return id.method.equals("GET") && (maps.containsKey(404) || assets.canProcess(id.path));
     }
 
-    void handleRequest(final Request request, final Consumer<Response> responseConsumer) {
-        handleRequest0(request, responseConsumer, !maps.isEmpty());
+    @Override
+    public void handleRequest(final RequestId id, final Map<String, String> headers, final ResourceConnect rc) {
+        handleRequest0(id, headers, rc, !maps.isEmpty());
     }
 
-    private void handleRequest0(final Request request, final Consumer<Response> responseConsumer, final boolean mayBeMapped) {
+    @Override
+    public void meDead(final ResourceConnect rc) {
+        cycler.removeRc(rc);
+    }
+
+    public void handleRequest0(final RequestId id, final Map<String, String> headers, final ResourceConnect rc, final boolean mayBeMapped) {
+        final Iterator<Endpoint> i = endpoints.iterator();
+        Pair<Boolean, Boolean> match;
+
         Response mappableResponse = null;
+        Endpoint e;
 
-        try {
-            for (final Endpoint e : endpoints) {
-                final Pair<Boolean, Boolean> ms = e.match(request.method(), request.path());
+        while (i.hasNext()) {
+            match = (e = i.next()).match(id.method, id.path);
 
-                if (ms.first && ms.second) {
-                    mappableResponse = e.call(request);
-                    break;
-                } else if (ms.second && request.method().equals("OPTIONS")) {
-                    responseConsumer.accept(cors.wrap(request, Response.NoContent()));
-                    return;
-                }
+            if (match.first && match.second) {
+                mappableResponse = e.call(new Request(id, headers, rc.getInput(), maxRequestBytes));
+                break;
             }
-        } catch (final ConcurrentModificationException cme) {
-            synchronized (endpoints) { // someone added/removed endpoint, just try to repeat op over fixed endpoints // todo refactor it
-                handleRequest0(request, responseConsumer, mayBeMapped);
-                return;
+
+            if (match.second && id.method.equals("OPTIONS")) {
+                mappableResponse = cors.wrap(headers, Response.NoContent());
+                break;
             }
         }
 
         if (mappableResponse == null) {
-            if (request.method().equals("GET"))
-                mappableResponse = assets.apply(request.uri());
+            if (id.method.equals("GET"))
+                mappableResponse = assets.apply(id.path);
 
             if (mappableResponse == null)
                 mappableResponse = Response.NotFound();
         }
 
         if (mayBeMapped && maps.containsKey(mappableResponse.code)) {
-            handleRequest0(request.remap(maps.get(mappableResponse.code)), responseConsumer, false);
+            handleRequest0(new RequestId(id.method, maps.get(mappableResponse.code)), headers, rc, false);
             return;
         }
 
-        responseConsumer.accept(mappableResponse);
+        writeResponse(mappableResponse, rc);
+    }
+
+    private void writeResponse(final Response response, final ResourceConnect rc) {
+        CompletableFuture.runAsync(() -> {
+            rc.write(response);
+            cycler.removeRc(rc);
+        });
     }
 
     public void addEndpoints(final Collection<Route> endpoints) {

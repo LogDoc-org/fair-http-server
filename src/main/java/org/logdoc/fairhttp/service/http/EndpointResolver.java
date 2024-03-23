@@ -1,5 +1,6 @@
 package org.logdoc.fairhttp.service.http;
 
+import org.logdoc.fairhttp.errors.BodyReadError;
 import org.logdoc.fairhttp.service.tools.Json;
 import org.logdoc.helpers.Digits;
 import org.logdoc.helpers.Reflects;
@@ -102,7 +103,13 @@ class EndpointResolver {
                 if (d.toLowerCase(Locale.ROOT).contains("[request]") && Request.class.isAssignableFrom(g))
                     solved.add(new Argued.Arg<>(Request.class, (req, pathMap) -> req, null, i));
                 else if (d.toLowerCase(Locale.ROOT).contains("[body]"))
-                    solved.add(new Argued.Arg<>(g, (req, pathMap) -> Json.fromJson(req.body().asJson(), g), null, i));
+                    solved.add(new Argued.Arg<>(g, (req, pathMap) -> {
+                        try {
+                            return req.jsonmap(g);
+                        } catch (BodyReadError e) {
+                            throw new RuntimeException(e);
+                        }
+                    }, null, i));
                 else {
                     try {
                         final BiFunction<Request, Map<String, String>, String> getString;
@@ -126,7 +133,13 @@ class EndpointResolver {
                                     getString = (req, pathMap) -> req.queryParam(name);
                                     break;
                                 case Form:
-                                    getString = (req, pathMap) -> req.body().formField(name);
+                                    getString = (req, pathMap) -> {
+                                        try {
+                                            return req.bodyForm().field(name);
+                                        } catch (BodyReadError e) {
+                                            throw new RuntimeException(e);
+                                        }
+                                    };
                                     break;
                                 default:
                                     throw new Exception();
@@ -140,8 +153,12 @@ class EndpointResolver {
                                 if ((s = pathMap.get(name)) != null)
                                     return s;
 
-                                if ((s = req.body().formField(name)) != null)
-                                    return s;
+                                try {
+                                    if ((s = req.bodyForm().field(name)) != null)
+                                        return s;
+                                } catch (BodyReadError e) {
+                                    throw new RuntimeException(e);
+                                }
 
                                 if ((s = req.queryParam(name)) != null)
                                     return s;
