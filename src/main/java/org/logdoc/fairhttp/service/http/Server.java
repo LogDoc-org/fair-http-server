@@ -46,8 +46,9 @@ public class Server implements RCBackup {
     private final AssetsRead assets;
     private final CORS cors;
     private final Map<Integer, String> maps;
-    private final RCCycler cycler;
+    private final ExecutorService executorService;
     private Function<Throwable, Response> errorHandler;
+    private List<ResourceConnect> rcs = new ArrayList<>();
 
     public Server(final int port, final int maxRequestBytes) { // minimal
         this.port = port;
@@ -67,7 +68,7 @@ public class Server implements RCBackup {
             return throwable == null ? Response.ServerError() : Response.ServerError(throwable.getMessage());
         };
 
-        cycler = new RCCycler(Executors.newCachedThreadPool());
+        executorService = Executors.newCachedThreadPool();
     }
 
     public Server(final Config config) {
@@ -144,7 +145,7 @@ public class Server implements RCBackup {
 
         cors = new CORS(config);
 
-        cycler = new RCCycler(Executors.newCachedThreadPool());
+        executorService = Executors.newCachedThreadPool();
     }
 
     public void start() {
@@ -153,7 +154,7 @@ public class Server implements RCBackup {
                 Socket child;
 
                 while ((child = socket.accept()) != null)
-                    cycler.addRc(new RCWrap(child, maxRequestBytes, readTimeout, this));
+                    rcs.add(new RCWrap(child, maxRequestBytes, readTimeout, this));
             } catch (final Exception e) {
                 logger.error(e.getMessage(), e);
                 System.exit(-1);
@@ -199,7 +200,12 @@ public class Server implements RCBackup {
 
     @Override
     public void meDead(final ResourceConnect rc) {
-        cycler.removeRc(rc);
+        try {rcs.remove(rc);} catch (final Exception ignore) {}
+    }
+
+    @Override
+    public void submit(final Runnable task) {
+        executorService.submit(task);
     }
 
     public void handleRequest0(final RequestId id, final Map<String, String> headers, final ResourceConnect rc, final boolean mayBeMapped) {
@@ -240,10 +246,7 @@ public class Server implements RCBackup {
     }
 
     private void writeResponse(final Response response, final ResourceConnect rc) {
-        CompletableFuture.runAsync(() -> {
-            rc.write(response);
-            cycler.removeRc(rc);
-        });
+        CompletableFuture.runAsync(() -> rc.write(response));
     }
 
     public void addEndpoints(final Collection<Route> endpoints) {

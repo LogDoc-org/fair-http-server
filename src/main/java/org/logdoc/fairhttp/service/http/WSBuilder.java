@@ -4,7 +4,6 @@ import org.logdoc.fairhttp.service.api.helpers.Headers;
 import org.logdoc.fairhttp.service.tools.websocket.extension.DefaultExtension;
 import org.logdoc.fairhttp.service.tools.websocket.extension.IExtension;
 import org.logdoc.fairhttp.service.tools.websocket.protocol.IProtocol;
-import org.slf4j.ILoggerFactory;
 
 import java.security.MessageDigest;
 import java.util.Base64;

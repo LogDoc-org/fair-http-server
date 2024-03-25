@@ -14,9 +14,5 @@ public interface ResourceConnect {
 
     void write(Response response);
 
-    boolean hasTask();
-
-    Runnable getTask();
-
     Socket getInput();
 }

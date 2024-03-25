@@ -32,7 +32,6 @@ final class RCWrap implements ResourceConnect {
     private final int maxRequestSize, readTimeout;
     private final RCBackup backup;
 
-    private Runnable task;
     private RequestId requestId;
 
     RCWrap(final Socket socket, final int maxRequestSize, final int readTimeout, final RCBackup backup) throws IOException {
@@ -48,7 +47,7 @@ final class RCWrap implements ResourceConnect {
         getIdStage.thenAccept(this::gotId);
         getIdStage.exceptionally(failed());
 
-        task = new RCSignature(socket, getIdStage);
+        backup.submit(new RCSignature(socket, getIdStage));
     }
 
     @Override
@@ -58,7 +57,6 @@ final class RCWrap implements ResourceConnect {
 
     private <K> Function<Throwable, K> failed() {
         return e -> {
-            logger.error("Stage failed: " + e.getMessage(), e);
             write(Response.ServerError(e.getMessage()));
             seppukku();
             return (K) null;
@@ -77,18 +75,16 @@ final class RCWrap implements ResourceConnect {
             return;
         }
 
+        this.requestId = requestId;
+
         final CompletableFuture<Map<String, String>> getHeaders = new CompletableFuture<>();
         getHeaders.thenAccept(this::gotHeaders);
         getHeaders.exceptionally(failed());
 
-        task = new RCHeaders(socket, getHeaders);
-
-        this.requestId = requestId;
+        backup.submit(new RCHeaders(socket, getHeaders));
     }
 
     private void gotHeaders(final Map<String, String> headers) {
-        task = null;
-
         if (headers == null || headers.isEmpty()) {
             write(Response.ClientError("Insufficient headers block"));
             seppukku();
@@ -120,11 +116,13 @@ final class RCWrap implements ResourceConnect {
 
         if (response instanceof WebSocket) {
             ((WebSocket) response).spinOff(socket);
+            backup.meDead(this);
             return;
         }
 
         try {
-            write(response.asBytes());
+            socket.getOutputStream().write(response.asBytes());
+            socket.getOutputStream().flush();
         } catch (final IOException e) {
             logger.error("Cant write response: " + e.getMessage(), e);
         } finally {
@@ -142,18 +140,9 @@ final class RCWrap implements ResourceConnect {
             socket.getOutputStream().flush();
         } catch (final Exception e) {
             logger.error(e.getMessage(), e);
+        } finally {
             seppukku();
         }
-    }
-
-    @Override
-    public boolean hasTask() {
-        return task != null;
-    }
-
-    @Override
-    public Runnable getTask() {
-        return task;
     }
 
     @Override

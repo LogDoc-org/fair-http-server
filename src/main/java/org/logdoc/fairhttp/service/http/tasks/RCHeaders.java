@@ -2,6 +2,7 @@ package org.logdoc.fairhttp.service.http.tasks;
 
 import java.io.InputStream;
 import java.net.Socket;
+import java.net.SocketTimeoutException;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
@@ -46,8 +47,12 @@ public class RCHeaders implements Runnable {
 
             int i = 0, idx;
             do {
-                buf[i++] = (byte) is.read();
-            } while (i < 4 || buf[i - 3] != '\r' || buf[i - 2] != '\n' || buf[i - 1] != '\r' || buf[i] != '\n');
+                try {
+                    buf[i++] = (byte) is.read();
+                } catch (final SocketTimeoutException e) {
+                    break;
+                }
+            } while (i < 4 || buf[i - 4] != '\r' || buf[i - 3] != '\n' || buf[i - 2] != '\r' || buf[i - 1] != '\n');
 
             final String data = new String(Arrays.copyOfRange(buf, 0, i - 3), StandardCharsets.UTF_8);
             final String[] heads = data.split("\n");

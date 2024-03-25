@@ -10,9 +10,7 @@ import org.logdoc.helpers.std.MimeType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.ByteArrayOutputStream;
-import java.io.IOException;
-import java.io.InputStream;
+import java.io.*;
 import java.net.Socket;
 import java.net.SocketAddress;
 import java.net.URLDecoder;
@@ -49,11 +47,8 @@ public class Request extends MapAttributed {
     private final Socket socket;
     private final int maxRequestSize;
     private Map<String, String> c;
-    private MimeType t;
     private int contentLength;
-    private boolean chunked;
-    private boolean gzip;
-    private boolean deflate;
+    private boolean chunked, gzip, deflate;
     private byte[] body;
     private String bs;
     private JsonNode bj;
@@ -67,7 +62,11 @@ public class Request extends MapAttributed {
         this.maxRequestSize = maxRequestSize;
     }
 
-    private static String stringQuotes(String value) {
+    public Socket getSocket() {
+        return socket;
+    }
+
+    private String stringQuotes(String value) {
         if (value == null)
             return null;
 
@@ -158,7 +157,8 @@ public class Request extends MapAttributed {
         body = new byte[contentLength];
         int total = 0, read;
 
-        try (final InputStream is = getIs()) {
+        try {
+            final InputStream is = getIs();
             while (total != contentLength) {
                 read = is.read(body, total, contentLength - total);
 
@@ -217,6 +217,7 @@ public class Request extends MapAttributed {
             return bm;
 
         try {
+            final byte[] body = bodyBytes();
             bm = new MultiForm();
             final byte[] bnd = new MimeType(header(Headers.ContentType)).getParameter("boundary").getBytes(StandardCharsets.ISO_8859_1);
             boolean done = false;
@@ -297,7 +298,7 @@ public class Request extends MapAttributed {
                         else if (cType.getBaseType().startsWith("text/"))
                             bm.textData(fieldName, new String(pb, StandardCharsets.UTF_8));
                         else
-                           bm.binData(fieldName, pb, partHeaders);
+                            bm.binData(fieldName, pb, partHeaders);
                     }
                 }
             }
@@ -325,7 +326,9 @@ public class Request extends MapAttributed {
 
     private byte[] readChunks() throws BodyReadError {
         try {
-            try (final ByteArrayOutputStream bos = new ByteArrayOutputStream(16 * 1024); final InputStream is = getIs()) {
+            final InputStream is = getIs();
+
+            try (final ByteArrayOutputStream bos = new ByteArrayOutputStream(16 * 1024)) {
                 int chunkSize, sum = 0;
 
                 do {
@@ -375,24 +378,23 @@ public class Request extends MapAttributed {
     }
 
     public Map<String, String> cookies() {
-        if (c == null)
-            synchronized (this) {
-                final Map<String, String> m = new HashMap<>();
+        if (c == null) {
+            final Map<String, String> m = new HashMap<>();
 
-                final String v = header(Headers.RequestCookies);
+            final String v = header(Headers.RequestCookies);
 
-                if (!isEmpty(v))
-                    Arrays.stream(v.split(";"))
-                            .filter(s -> s.contains("="))
-                            .forEach(c -> {
-                                final String[] parts = c.split(Pattern.quote("="), 2);
-                                if (parts.length != 2) return;
+            if (!isEmpty(v))
+                Arrays.stream(v.split(";"))
+                        .filter(s -> s.contains("="))
+                        .forEach(c -> {
+                            final String[] parts = c.split(Pattern.quote("="), 2);
+                            if (parts.length != 2) return;
 
-                                m.put(notNull(parts[0]), stringQuotes(parts[1]));
-                            });
+                            m.put(notNull(parts[0]), stringQuotes(parts[1]));
+                        });
 
-                c = Collections.unmodifiableMap(m);
-            }
+            c = Collections.unmodifiableMap(m);
+        }
 
         return c;
     }

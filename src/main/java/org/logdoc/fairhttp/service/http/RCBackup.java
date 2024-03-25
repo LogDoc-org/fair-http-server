@@ -14,4 +14,6 @@ interface RCBackup {
     void handleRequest(RequestId id, Map<String, String> headers, ResourceConnect rc);
 
     void meDead(ResourceConnect rc);
+
+    void submit(Runnable task);
 }
