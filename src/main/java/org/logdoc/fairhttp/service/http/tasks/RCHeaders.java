@@ -43,6 +43,7 @@ public class RCHeaders implements Runnable {
                 }
             };
             final byte[] buf = new byte[8192];
+            socket.setSoTimeout(5000);
             final InputStream is = socket.getInputStream();
 
             int i = 0, idx;

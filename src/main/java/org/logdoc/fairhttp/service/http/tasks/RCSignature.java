@@ -28,7 +28,7 @@ public class RCSignature implements Runnable {
     @Override
     public void run() {
         try {
-            socket.setSoTimeout(500);
+            socket.setSoTimeout(5000);
             final InputStream is = socket.getInputStream();
 
             final byte[] buf = new byte[4096];
