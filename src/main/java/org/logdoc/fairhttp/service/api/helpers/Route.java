@@ -83,6 +83,12 @@ public class Route {
         return sync(method.name(), endpoint, callback);
     }
 
+    /**
+     * Adds condition with when successfully applied may interrupt request with given response, before any call is made to business logic
+     * @param breakIfPredicate predicate to be applied
+     * @param breakWithResponse response to be used if condition is true
+     * @return route itself
+     */
     public Route breakIf(final BiFunction<Request, Map<String, String>, Boolean> breakIfPredicate, final Response breakWithResponse) {
         if (breakIfPredicate == null || breakWithResponse == null)
             return this;
