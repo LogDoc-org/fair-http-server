@@ -4,6 +4,7 @@ import org.logdoc.fairhttp.service.http.Request;
 import org.logdoc.fairhttp.service.http.Response;
 
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 import java.util.function.BiFunction;
 
@@ -16,13 +17,10 @@ import static org.logdoc.helpers.Texts.notNull;
  * FairHttpService ☭ sweat and blood
  */
 public class Route {
-    public enum Method {GET, POST, PUT, PATCH, OPTIONS, DELETE, HEAD, TRACE}
-
     public final String method;
     public final String endpoint;
-    public final BiFunction<Request, Map<String, String>, ?> callback;
     public final boolean indirect;
-
+    public BiFunction<Request, Map<String, String>, ?> callback;
 
     private Route(final String method, final String endpoint, final BiFunction<Request, Map<String, String>, ?> callback, final boolean indirect) {
         this.method = method;
@@ -84,4 +82,17 @@ public class Route {
 
         return sync(method.name(), endpoint, callback);
     }
+
+    public void breakIf(final BiFunction<Request, Map<String, String>, Boolean> breakPredicate, final Response breakToResponse) {
+        if (breakPredicate == null || breakToResponse == null)
+            return;
+
+        final BiFunction<Request, Map<String, String>, ?> orig = callback;
+
+        callback = indirect
+                ? ((request, pathMap) -> breakPredicate.apply(request, pathMap) ? CompletableFuture.completedFuture(breakToResponse) : orig.apply(request, pathMap))
+                : ((request, pathMap) -> breakPredicate.apply(request, pathMap) ? breakToResponse : orig.apply(request, pathMap));
+    }
+
+    public enum Method {GET, POST, PUT, PATCH, OPTIONS, DELETE, HEAD, TRACE}
 }

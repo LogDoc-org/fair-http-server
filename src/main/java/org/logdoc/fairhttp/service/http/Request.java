@@ -10,7 +10,9 @@ import org.logdoc.helpers.std.MimeType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.*;
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
 import java.net.Socket;
 import java.net.SocketAddress;
 import java.net.URLDecoder;
@@ -195,6 +197,7 @@ public class Request extends MapAttributed {
             return bf;
 
         bf = new Form();
+        final String bs = bodyString();
 
         Arrays.stream(bs.split(Pattern.quote("&")))
                 .map(pair -> pair.split(Pattern.quote("=")))

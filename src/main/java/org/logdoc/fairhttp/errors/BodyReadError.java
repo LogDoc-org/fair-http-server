@@ -5,7 +5,7 @@ package org.logdoc.fairhttp.errors;
  * 23.03.2024 14:42
  * fair-http-server ☭ sweat and blood
  */
-public class BodyReadError extends Exception {
+public class BodyReadError extends RuntimeException {
     public BodyReadError() {
     }
 
