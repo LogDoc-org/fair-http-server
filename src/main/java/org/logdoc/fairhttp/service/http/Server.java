@@ -286,14 +286,14 @@ public class Server implements RCBackup {
     }
 
     @SuppressWarnings({"unchecked", "UnusedReturnValue"})
-    public synchronized void addEndpoint(final Route endpoint) {
-        if (endpoints.add(new Endpoint(endpoint.method, new Signature(endpoint.endpoint),
-                endpoint.indirect
+    public synchronized void addEndpoint(final Route route) {
+        if (endpoints.add(new Endpoint(route.method, new Signature(route.endpoint),
+                route.indirect
                         ? (req, pathMap) -> {
                     try {
                         return CompletableFuture.supplyAsync(() -> {
                                     try {
-                                        return ((CompletionStage<Response>) endpoint.callback.apply(req, pathMap)).toCompletableFuture().get(execTimeout, TimeUnit.SECONDS);
+                                        return ((CompletionStage<Response>) route.callback.apply(req, pathMap)).toCompletableFuture().get(execTimeout, TimeUnit.SECONDS);
                                     } catch (final InterruptedException | ExecutionException | TimeoutException e) {
                                         throw new RuntimeException(e);
                                     }
@@ -311,7 +311,7 @@ public class Server implements RCBackup {
                 }
                         : (req, pathMap) -> {
                     try {
-                        return CompletableFuture.supplyAsync(() -> ((Response) endpoint.callback.apply(req, pathMap)))
+                        return CompletableFuture.supplyAsync(() -> ((Response) route.callback.apply(req, pathMap)))
                                 .exceptionally(e -> {
                                     if (e instanceof RuntimeException)
                                         throw (RuntimeException) e;
@@ -323,7 +323,7 @@ public class Server implements RCBackup {
                         return errorHandler.apply(ex);
                     }
                 })))
-            logger.info("Added endpoint: " + endpoint.method + "\t" + endpoint.endpoint);
+            logger.info("Added endpoint: " + route.method + "\t" + route.endpoint);
     }
 
     public synchronized void setupErrorHandler(final Function<Throwable, Response> errorHandler) {

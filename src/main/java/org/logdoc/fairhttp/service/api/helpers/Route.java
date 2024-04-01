@@ -83,15 +83,17 @@ public class Route {
         return sync(method.name(), endpoint, callback);
     }
 
-    public void breakIf(final BiFunction<Request, Map<String, String>, Boolean> breakPredicate, final Response breakToResponse) {
-        if (breakPredicate == null || breakToResponse == null)
-            return;
+    public Route breakIf(final BiFunction<Request, Map<String, String>, Boolean> breakIfPredicate, final Response breakWithResponse) {
+        if (breakIfPredicate == null || breakWithResponse == null)
+            return this;
 
         final BiFunction<Request, Map<String, String>, ?> orig = callback;
 
         callback = indirect
-                ? ((request, pathMap) -> breakPredicate.apply(request, pathMap) ? CompletableFuture.completedFuture(breakToResponse) : orig.apply(request, pathMap))
-                : ((request, pathMap) -> breakPredicate.apply(request, pathMap) ? breakToResponse : orig.apply(request, pathMap));
+                ? ((request, pathMap) -> breakIfPredicate.apply(request, pathMap) ? CompletableFuture.completedFuture(breakWithResponse) : orig.apply(request, pathMap))
+                : ((request, pathMap) -> breakIfPredicate.apply(request, pathMap) ? breakWithResponse : orig.apply(request, pathMap));
+
+        return this;
     }
 
     public enum Method {GET, POST, PUT, PATCH, OPTIONS, DELETE, HEAD, TRACE}
