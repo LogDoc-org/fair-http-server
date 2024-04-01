@@ -20,7 +20,9 @@ public class Route {
     public final String method;
     public final String endpoint;
     public final boolean indirect;
-    public BiFunction<Request, Map<String, String>, ?> callback;
+    public final BiFunction<Request, Map<String, String>, ?> callback;
+    public Response breakWithResponse;
+    private BiFunction<Request, Map<String, String>, Boolean> breakIfPredicate;
 
     private Route(final String method, final String endpoint, final BiFunction<Request, Map<String, String>, ?> callback, final boolean indirect) {
         this.method = method;
@@ -93,13 +95,14 @@ public class Route {
         if (breakIfPredicate == null || breakWithResponse == null)
             return this;
 
-        final BiFunction<Request, Map<String, String>, ?> orig = callback;
-
-        callback = indirect
-                ? ((request, pathMap) -> breakIfPredicate.apply(request, pathMap) ? CompletableFuture.completedFuture(breakWithResponse) : orig.apply(request, pathMap))
-                : ((request, pathMap) -> breakIfPredicate.apply(request, pathMap) ? breakWithResponse : orig.apply(request, pathMap));
+        this.breakIfPredicate = breakIfPredicate;
+        this.breakWithResponse = breakWithResponse;
 
         return this;
+    }
+
+    public boolean shouldBreak(final Request request, final Map<String, String> pathMap) {
+        return breakIfPredicate != null && breakIfPredicate.apply(request, pathMap);
     }
 
     public enum Method {GET, POST, PUT, PATCH, OPTIONS, DELETE, HEAD, TRACE}

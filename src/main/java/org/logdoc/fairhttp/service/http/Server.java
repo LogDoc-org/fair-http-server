@@ -292,6 +292,9 @@ public class Server implements RCBackup {
                         ? (req, pathMap) -> {
                     try {
                         return CompletableFuture.supplyAsync(() -> {
+                                    if (route.shouldBreak(req, pathMap))
+                                        return route.breakWithResponse;
+
                                     try {
                                         return ((CompletionStage<Response>) route.callback.apply(req, pathMap)).toCompletableFuture().get(execTimeout, TimeUnit.SECONDS);
                                     } catch (final InterruptedException | ExecutionException | TimeoutException e) {
@@ -311,7 +314,12 @@ public class Server implements RCBackup {
                 }
                         : (req, pathMap) -> {
                     try {
-                        return CompletableFuture.supplyAsync(() -> ((Response) route.callback.apply(req, pathMap)))
+                        return CompletableFuture.supplyAsync(() -> {
+                                    if (route.shouldBreak(req, pathMap))
+                                        return route.breakWithResponse;
+
+                                    return ((Response) route.callback.apply(req, pathMap));
+                                })
                                 .exceptionally(e -> {
                                     if (e instanceof RuntimeException)
                                         throw (RuntimeException) e;
