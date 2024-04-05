@@ -204,7 +204,7 @@ public class Request extends MapAttributed {
                 .forEach(kv -> {
                     final String v = URLDecoder.decode(kv[1], StandardCharsets.UTF_8);
 
-                    if (isEmpty(v)) {
+                    if (!isEmpty(v)) {
                         if (!bf.containsKey(kv[0]))
                             bf.put(kv[0], new ArrayList<>(2));
 
