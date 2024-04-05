@@ -200,16 +200,20 @@ public class Request extends MapAttributed {
         final String bs = bodyString();
 
         Arrays.stream(bs.split(Pattern.quote("&")))
-                .map(pair -> pair.split(Pattern.quote("=")))
+                .map(pair -> pair.split(Pattern.quote("="), 2))
                 .forEach(kv -> {
-                    final String v = URLDecoder.decode(kv[1], StandardCharsets.UTF_8);
+                    if (kv.length == 2)
+                        try {
+                            final String key = notNull(kv[0]),
+                                    val = URLDecoder.decode(kv[1], StandardCharsets.UTF_8);
 
-                    if (!isEmpty(v)) {
-                        if (!bf.containsKey(kv[0]))
-                            bf.put(kv[0], new ArrayList<>(2));
-
-                        bf.get(kv[0]).add(v);
-                    }
+                            if (!isEmpty(val)) {
+                                bf.putIfAbsent(key, new ArrayList<>(2));
+                                bf.get(key).add(val);
+                            }
+                        } catch (final Exception e) {
+                            logger.error(e.getMessage(), e);
+                        }
                 });
 
         return bf;
