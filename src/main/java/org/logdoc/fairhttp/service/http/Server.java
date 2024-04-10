@@ -24,6 +24,7 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.*;
 import java.util.concurrent.*;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -48,7 +49,6 @@ public class Server implements RCBackup {
     private final Map<Integer, String> maps;
     private final ExecutorService executorService;
     private Function<Throwable, Response> errorHandler;
-    private List<ResourceConnect> rcs = new ArrayList<>();
 
     public Server(final int port, final int maxRequestBytes) { // minimal
         this.port = port;
@@ -149,12 +149,15 @@ public class Server implements RCBackup {
     }
 
     public void start() {
+        final AtomicInteger realPort = new AtomicInteger(port);
         new Thread(() -> {
             try (final ServerSocket socket = new ServerSocket(port)) {
+                realPort.set(socket.getLocalPort());
+
                 Socket child;
 
                 while ((child = socket.accept()) != null)
-                    rcs.add(new RCWrap(child, maxRequestBytes, readTimeout, this));
+                    new RCWrap(child, maxRequestBytes, readTimeout, this);
             } catch (final Exception e) {
                 logger.error(e.getMessage(), e);
                 System.exit(-1);
@@ -169,7 +172,7 @@ public class Server implements RCBackup {
         }.start();
 
         try {
-            logger.info("Listen at:\thttp://" + Inet4Address.getLocalHost().getHostAddress() + ":" + port);
+            logger.info("Listen at:\thttp://" + Inet4Address.getLocalHost().getHostAddress() + ":" + realPort.get());
         } catch (final Exception e) {
             logger.error("Cant get local host: " + e.getMessage(), e);
         }
@@ -200,7 +203,7 @@ public class Server implements RCBackup {
 
     @Override
     public void meDead(final ResourceConnect rc) {
-        try {rcs.remove(rc);} catch (final Exception ignore) {}
+        //
     }
 
     @Override
