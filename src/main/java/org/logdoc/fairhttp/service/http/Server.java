@@ -149,10 +149,9 @@ public class Server implements RCBackup {
     }
 
     public void start() {
-        final AtomicInteger realPort = new AtomicInteger(port);
         new Thread(() -> {
             try (final ServerSocket socket = new ServerSocket(port)) {
-                realPort.set(socket.getLocalPort());
+                logger.info("Listen at:\thttp://" + Inet4Address.getLocalHost().getHostAddress() + ":" + socket.getLocalPort());
 
                 Socket child;
 
@@ -170,12 +169,6 @@ public class Server implements RCBackup {
                 super.start();
             }
         }.start();
-
-        try {
-            logger.info("Listen at:\thttp://" + Inet4Address.getLocalHost().getHostAddress() + ":" + realPort.get());
-        } catch (final Exception e) {
-            logger.error("Cant get local host: " + e.getMessage(), e);
-        }
     }
 
     @Override
