@@ -229,7 +229,7 @@ public class Cookie {
 
         private String name;
         private String value;
-        private Integer maxAge;
+        private int maxAge;
         private String path = "/";
         private String domain;
         private boolean secure = false;
