@@ -20,6 +20,8 @@ import java.util.Set;
 import java.util.function.Consumer;
 
 import static org.logdoc.fairhttp.service.api.Controller.ok;
+import static org.logdoc.fairhttp.service.http.RFC.FEED;
+import static org.logdoc.fairhttp.service.http.RFC.PROTO;
 import static org.logdoc.helpers.Texts.isEmpty;
 import static org.logdoc.helpers.Texts.notNull;
 
@@ -29,27 +31,24 @@ import static org.logdoc.helpers.Texts.notNull;
  * fair-http-server ☭ sweat and blood
  */
 public class Response extends MapAttributed {
-    public static final byte[] FEED = new byte[]{'\r', '\n'};
-    private static final byte[] PROTO = "HTTP/1.1".getBytes(StandardCharsets.US_ASCII);
-    protected final Map<String, String> headers;
+    private final Map<String, String> headers;
     private final Set<Cookie> cookies;
-    int code;
+
+    private Consumer<OutputStream> promise;
     private String message;
     private byte[] payload;
-    private Consumer<OutputStream> promise;
+    private int code;
 
-    {
+    private Response() {
         headers = new HashMap<>(2);
-        headers.put("Server", "FairHttpServer/2.0.0");
+        headers.put("Server", "FairHttpServer/2.0.10");
         headers.put("Connection", "keep-alive");
 
         cookies = new HashSet<>(2);
     }
 
-    private Response() {
-    }
-
     public Response(final int code, final String message) {
+        this();
         this.code = code;
         this.message = message;
     }
@@ -94,20 +93,21 @@ public class Response extends MapAttributed {
         return new Response(400, reason);
     }
 
+    public int getCode() {
+        return code;
+    }
+
     public void setPromise(final Consumer<OutputStream> promise) {
-        if (promise == null)
-            return;
+        if (promise == null) return;
 
         this.promise = promise;
         this.payload = null;
     }
 
     public void setPayload(final byte[] payload, final MimeType contentType) {
-        if (isEmpty(payload))
-            return;
+        if (isEmpty(payload)) return;
 
-        if (contentType == null)
-            throw new NullPointerException("Content-Type");
+        if (contentType == null) throw new NullPointerException("Content-Type");
 
         this.payload = payload;
 
@@ -117,10 +117,13 @@ public class Response extends MapAttributed {
     }
 
     public void header(final String name, final Object value) {
-        if (isEmpty(name) || isEmpty(value))
-            return;
+        if (isEmpty(name) || isEmpty(value)) return;
 
         headers.put(name.trim(), notNull(value));
+    }
+
+    public String header(final String name) {
+        return headers.get(name);
     }
 
     byte[] asBytes() throws IOException {
@@ -129,11 +132,9 @@ public class Response extends MapAttributed {
             os.write((" " + code + (isEmpty(message) ? "" : " " + message)).getBytes(StandardCharsets.US_ASCII));
             os.write(FEED);
 
-            if (promise != null && PhasedConsumer.class.isAssignableFrom(promise.getClass()))
-                ((PhasedConsumer<OutputStream>) promise).warmUp(os);
+            if (promise != null && PhasedConsumer.class.isAssignableFrom(promise.getClass())) ((PhasedConsumer<OutputStream>) promise).warmUp(os);
 
-            if (isEmpty(payload) && promise == null && !(this instanceof WebSocket))
-                header(Headers.ContentLength, 0);
+            if (isEmpty(payload) && promise == null && !(this instanceof WebSocket)) header(Headers.ContentLength, 0);
 
             header("Date", LocalDateTime.now().atOffset(ZoneOffset.UTC).format(DateTimeFormatter.RFC_1123_DATE_TIME));
 
@@ -150,10 +151,8 @@ public class Response extends MapAttributed {
 
             os.write(FEED);
 
-            if (!isEmpty(payload) && !(this instanceof WebSocket))
-                os.write(payload);
-            else if (promise != null)
-                promise.accept(os);
+            if (!isEmpty(payload) && !(this instanceof WebSocket)) os.write(payload);
+            else if (promise != null) promise.accept(os);
 
             os.flush();
 
@@ -167,17 +166,14 @@ public class Response extends MapAttributed {
     }
 
     public Response withCookie(final Cookie... cookies) {
-        if (!isEmpty(cookies))
-            for (final Cookie c : cookies)
-                if (c != null)
-                    this.cookies.add(c);
+        if (!isEmpty(cookies)) for (final Cookie c : cookies)
+            if (c != null) this.cookies.add(c);
 
         return this;
     }
 
     public Response withHeader(final String name, final String value) {
-        if (!isEmpty(value) && !isEmpty(name))
-            header(name.trim(), value.trim());
+        if (!isEmpty(value) && !isEmpty(name)) header(name.trim(), value.trim());
 
         return this;
     }
@@ -187,8 +183,7 @@ public class Response extends MapAttributed {
     }
 
     public Response as(final MimeType mime) {
-        if (mime != null)
-            header(Headers.ContentType, mime);
+        if (mime != null) header(Headers.ContentType, mime);
 
         return this;
     }

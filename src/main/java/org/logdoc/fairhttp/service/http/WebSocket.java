@@ -62,7 +62,7 @@ public final class WebSocket extends Response {
     }
 
     public String wsId() {
-        return headers.get(Headers.SecWebsocketAccept);
+        return header(Headers.SecWebsocketAccept);
     }
 
     private void nextByte(final byte b) {

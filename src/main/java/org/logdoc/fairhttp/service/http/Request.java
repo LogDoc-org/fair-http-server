@@ -24,6 +24,7 @@ import java.util.regex.Pattern;
 import java.util.zip.GZIPInputStream;
 import java.util.zip.InflaterInputStream;
 
+import static org.logdoc.fairhttp.service.http.RFC.*;
 import static org.logdoc.fairhttp.service.tools.websocket.protocol.IProtocol.WS_VERSION;
 import static org.logdoc.helpers.Digits.getInt;
 import static org.logdoc.helpers.Texts.isEmpty;
@@ -37,12 +38,6 @@ import static org.logdoc.helpers.std.MimeTypes.TEXTPLAIN;
  */
 public class Request extends MapAttributed {
     private static final Logger logger = LoggerFactory.getLogger(Request.class);
-    private static final byte CR = 0x0D, LF = 0x0A, DASH = 0x2D;
-
-    public static final byte[] streamEnd = {DASH, DASH},
-            headerSeparator = {CR, LF, CR, LF},
-            fieldSeparator = {CR, LF},
-            boundaryPrefix = {CR, LF, DASH, DASH};
 
     private final RequestId id;
     private final Map<String, String> headers;
@@ -250,28 +245,28 @@ public class Request extends MapAttributed {
 
                 i += bnd.length;
 
-                final int hdrs = indexOf(body, headerSeparator, i + 1);
+                final int hdrs = indexOf(body, BODY_SEPARATOR, i + 1);
 
                 if (hdrs > i) {
                     int hdr;
 
-                    while ((hdr = indexOf(body, fieldSeparator, i)) <= hdrs) {
+                    while ((hdr = indexOf(body, SEPARATOR, i)) <= hdrs) {
                         final String hs = notNull(new String(Arrays.copyOfRange(body, i, hdr), StandardCharsets.UTF_8));
                         final int sep = hs.indexOf(':');
 
                         if (sep != -1)
                             partHeaders.put(notNull(hs.substring(0, sep)), notNull(hs.substring(sep + 1)));
 
-                        i = hdr + fieldSeparator.length;
+                        i = hdr + SEPARATOR.length;
                     }
 
                     i += 2;
 
-                    int till = indexOf(body, boundaryPrefix, i);
+                    int till = indexOf(body, BOUNDARY_PREF, i);
 
                     if (till == -1) {
                         done = true;
-                        till = indexOf(body, streamEnd, i);
+                        till = indexOf(body, EO_STREAM, i);
                     }
 
                     final byte[] pb = Arrays.copyOfRange(body, i, till);

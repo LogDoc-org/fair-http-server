@@ -233,8 +233,8 @@ public class Server implements RCBackup {
                 mappableResponse = Response.NotFound();
         }
 
-        if (mayBeMapped && maps.containsKey(mappableResponse.code)) {
-            handleRequest0(new RequestId(id.method, maps.get(mappableResponse.code)), headers, rc, false);
+        if (mayBeMapped && maps.containsKey(mappableResponse.getCode())) {
+            handleRequest0(new RequestId(id.method, maps.get(mappableResponse.getCode())), headers, rc, false);
             return;
         }
 

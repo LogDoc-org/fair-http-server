@@ -23,7 +23,7 @@ import java.util.Objects;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
-import static org.logdoc.fairhttp.service.http.Response.FEED;
+import static org.logdoc.fairhttp.service.http.RFC.FEED;
 import static org.logdoc.helpers.std.MimeTypes.TEXTHTML;
 
 /**
