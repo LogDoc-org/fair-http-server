@@ -121,12 +121,9 @@ final class RCWrap implements ResourceConnect {
         }
 
         try {
-            socket.getOutputStream().write(response.asBytes());
-            socket.getOutputStream().flush();
+            write(response.asBytes());
         } catch (final IOException e) {
             logger.error("Cant write response: " + e.getMessage(), e);
-        } finally {
-            seppukku();
         }
     }
 
@@ -138,6 +135,7 @@ final class RCWrap implements ResourceConnect {
         try {
             socket.getOutputStream().write(data);
             socket.getOutputStream().flush();
+        } catch (final SocketException ignore) {
         } catch (final Exception e) {
             logger.error(e.getMessage(), e);
         } finally {

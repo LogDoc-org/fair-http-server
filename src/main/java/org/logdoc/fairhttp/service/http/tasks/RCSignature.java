@@ -1,7 +1,6 @@
 package org.logdoc.fairhttp.service.http.tasks;
 
 import org.logdoc.fairhttp.service.http.RequestId;
-import org.slf4j.ILoggerFactory;
 
 import java.io.EOFException;
 import java.io.InputStream;
