@@ -404,4 +404,8 @@ public class Request extends MapAttributed {
     public <T> T jsonmap(final Class<? extends T> klass) throws BodyReadError {
         return Json.fromJson(bodyJson(), klass);
     }
+
+    public Map<String, String> getHeaders() {
+        return new HashMap<>(headers);
+    }
 }
