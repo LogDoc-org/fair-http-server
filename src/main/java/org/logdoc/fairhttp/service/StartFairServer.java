@@ -12,6 +12,7 @@ import org.slf4j.LoggerFactory;
 import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
+import java.util.HashSet;
 
 import static org.logdoc.helpers.std.MimeTypes.TEXTPLAIN;
 
@@ -74,7 +75,7 @@ public class StartFairServer {
         s.start();
 
         if (c.hasPath("fair.preload.load"))
-            c.getStringList("fair.preload.load").forEach(lc -> {
+            new HashSet<>(c.getStringList("fair.preload.load")).forEach(lc -> {
                 try {
                     DI.preload((Class<Preloaded>) Class.forName(lc));
                 } catch (final Exception e) {
