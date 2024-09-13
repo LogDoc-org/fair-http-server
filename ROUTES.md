@@ -1,8 +1,8 @@
 ### Basics
-Routes file must be named exactly "routes" and must be available in a classpath at "/" location.
+Routes file must be named exactly "endpoints" and must be available in a classpath at "/" location.
 
-One route defined by one line of three parts:
-`Method [1+ space] endpoint path [1+ space] handler`  
+One endpoint defined by one line of three parts:
+`Method [1+ space] route path [1+ space] handler`  
 Simple example:  
 `GET    /api/version    controllers.MyController.getVersion`
 
@@ -15,7 +15,7 @@ Handler is a some controller's fully qualified method name. Optionally, may cont
 
 ### Path variables
 In endpoints parts every sequence of chars prepended with `/:` prefix treated as a variable, e.g. everything after prefix and untill next `/` or EOL is taken as the value of this variable.
-That mean defined endpoint `/api/:myvar/set` in runtime backed by regular expression `^/api/([^/]+)/set$` and every path matched that RE will be handled by appropriate handler.
+That mean defined route `/api/:myvar/set` in runtime backed by regular expression `^/api/([^/]+)/set$` and every path matched that RE will be handled by appropriate handler.
 
 
 ### Handlers arguments

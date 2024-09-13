@@ -11,7 +11,7 @@ import org.apache.ibatis.session.SqlSessionManager;
 import org.apache.ibatis.transaction.jdbc.JdbcTransactionFactory;
 import org.logdoc.fairhttp.service.api.helpers.EagerSingleton;
 import org.logdoc.fairhttp.service.api.helpers.Preloaded;
-import org.logdoc.fairhttp.service.api.helpers.Route;
+import org.logdoc.fairhttp.service.api.helpers.Endpoint;
 import org.logdoc.fairhttp.service.api.helpers.Singleton;
 import org.logdoc.fairhttp.service.http.Request;
 import org.logdoc.fairhttp.service.http.Server;
@@ -53,11 +53,11 @@ public final class DI {
         eagers = new HashSet<>(8);
     }
 
-    public static void endpoints(final Route... routes) {
-        if (routes == null || routes.length == 0)
+    public static void endpoints(final Endpoint... endpoints) {
+        if (endpoints == null || endpoints.length == 0)
             return;
 
-        gain(Server.class).addEndpoints(Arrays.stream(routes).filter(Objects::nonNull).collect(Collectors.toList()));
+        gain(Server.class).addEndpoints(Arrays.stream(endpoints).filter(Objects::nonNull).collect(Collectors.toList()));
     }
 
     synchronized static void init(final Config config0) {

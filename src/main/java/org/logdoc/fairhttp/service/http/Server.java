@@ -1,8 +1,8 @@
 package org.logdoc.fairhttp.service.http;
 
 import com.typesafe.config.Config;
-import org.logdoc.fairhttp.service.api.helpers.Route;
-import org.logdoc.fairhttp.service.api.helpers.endpoint.Endpoint;
+import org.logdoc.fairhttp.service.api.helpers.Endpoint;
+import org.logdoc.fairhttp.service.api.helpers.endpoint.Route;
 import org.logdoc.fairhttp.service.api.helpers.endpoint.Signature;
 import org.logdoc.fairhttp.service.api.helpers.endpoint.invokers.*;
 import org.logdoc.fairhttp.service.http.statics.AssetsRead;
@@ -24,7 +24,6 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.*;
 import java.util.concurrent.*;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -41,7 +40,7 @@ import static org.logdoc.helpers.Texts.notNull;
 public class Server implements RCBackup {
     private static final Logger logger = LoggerFactory.getLogger(Server.class);
     private static Server backRef = null;
-    private final SortedSet<Endpoint> endpoints;
+    private final SortedSet<Route> routes;
     private final int port, maxRequestBytes;
     private final int readTimeout, execTimeout;
     private final AssetsRead assets;
@@ -55,7 +54,7 @@ public class Server implements RCBackup {
         this.maxRequestBytes = maxRequestBytes;
         this.readTimeout = 15000;
         this.execTimeout = 180;
-        this.endpoints = new TreeSet<>();
+        this.routes = new TreeSet<>();
         maps = new HashMap<>(0);
 
         assets = new NoStatics();
@@ -85,7 +84,7 @@ public class Server implements RCBackup {
         execTimeout = config.getInt(ConfigPath.EXEC_TIMEOUT);
         maps = new HashMap<>(0);
 
-        this.endpoints = new TreeSet<>();
+        this.routes = new TreeSet<>();
 
         final Config staticsCfg = ConfigTools.sureConf(config, "fair.http.statics");
         final String dir = staticsCfg != null && staticsCfg.hasPath("root") && !staticsCfg.getIsNull("root") ? notNull(staticsCfg.getString("root")) : null;
@@ -173,7 +172,7 @@ public class Server implements RCBackup {
 
     @Override
     public boolean canProcess(final RequestId id) {
-        final Iterator<Endpoint> i = endpoints.iterator();
+        final Iterator<Route> i = routes.iterator();
         Pair<Boolean, Boolean> reply;
 
         while (i.hasNext()) {
@@ -205,11 +204,11 @@ public class Server implements RCBackup {
     }
 
     public void handleRequest0(final RequestId id, final Map<String, String> headers, final ResourceConnect rc, final boolean mayBeMapped) {
-        final Iterator<Endpoint> i = endpoints.iterator();
+        final Iterator<Route> i = routes.iterator();
         Pair<Boolean, Boolean> match;
 
         Response mappableResponse = null;
-        Endpoint e;
+        Route e;
 
         while (i.hasNext()) {
             match = (e = i.next()).match(id.method, id.path);
@@ -245,8 +244,8 @@ public class Server implements RCBackup {
         CompletableFuture.runAsync(() -> rc.write(response));
     }
 
-    public void addEndpoints(final Collection<Route> endpoints) {
-        for (final Route pretend : endpoints)
+    public void addEndpoints(final Collection<Endpoint> endpoints) {
+        for (final Endpoint pretend : endpoints)
             addEndpoint(pretend);
     }
 
@@ -271,28 +270,28 @@ public class Server implements RCBackup {
                                 : new IndirectInvoker(argued.invMethod, Collections.unmodifiableList(argued.args.stream().map(arg -> arg.magic).collect(Collectors.toList())), errorHandler, execTimeout);
                     }
 
-                    final Endpoint ep = new Endpoint(argued.method, new Signature(argued.path), invoker);
-                    if (endpoints.add(ep))
+                    final Route ep = new Route(argued.method, new Signature(argued.path), invoker);
+                    if (routes.add(ep))
                         logger.info("Added endpoint: " + ep);
                 });
     }
 
     public synchronized boolean removeEndpoint(final String method, final String signature) {
-        return endpoints.removeIf(e -> e.equals(method, signature));
+        return routes.removeIf(e -> e.equals(method, signature));
     }
 
     @SuppressWarnings({"unchecked", "UnusedReturnValue"})
-    public synchronized void addEndpoint(final Route route) {
-        if (endpoints.add(new Endpoint(route.method, new Signature(route.endpoint),
-                route.indirect
+    public synchronized void addEndpoint(final Endpoint endpoint) {
+        if (routes.add(new Route(endpoint.method, new Signature(endpoint.endpoint),
+                endpoint.indirect
                         ? (req, pathMap) -> {
                     try {
                         return CompletableFuture.supplyAsync(() -> {
-                                    if (route.shouldBreak(req, pathMap))
-                                        return route.breakWithResponse;
+                                    if (endpoint.shouldBreak(req, pathMap))
+                                        return endpoint.breakWithResponse;
 
                                     try {
-                                        return ((CompletionStage<Response>) route.callback.apply(req, pathMap)).toCompletableFuture().get(execTimeout, TimeUnit.SECONDS);
+                                        return ((CompletionStage<Response>) endpoint.callback.apply(req, pathMap)).toCompletableFuture().get(execTimeout, TimeUnit.SECONDS);
                                     } catch (final InterruptedException | ExecutionException | TimeoutException e) {
                                         throw new RuntimeException(e);
                                     }
@@ -311,10 +310,10 @@ public class Server implements RCBackup {
                         : (req, pathMap) -> {
                     try {
                         return CompletableFuture.supplyAsync(() -> {
-                                    if (route.shouldBreak(req, pathMap))
-                                        return route.breakWithResponse;
+                                    if (endpoint.shouldBreak(req, pathMap))
+                                        return endpoint.breakWithResponse;
 
-                                    return ((Response) route.callback.apply(req, pathMap));
+                                    return ((Response) endpoint.callback.apply(req, pathMap));
                                 })
                                 .exceptionally(e -> {
                                     if (e instanceof RuntimeException)
@@ -327,7 +326,7 @@ public class Server implements RCBackup {
                         return errorHandler.apply(ex);
                     }
                 })))
-            logger.info("Added endpoint: " + route.method + "\t" + route.endpoint);
+            logger.info("Added endpoint: " + endpoint.method + "\t" + endpoint.endpoint);
     }
 
     public synchronized void setupErrorHandler(final Function<Throwable, Response> errorHandler) {

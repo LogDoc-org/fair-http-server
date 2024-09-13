@@ -3,8 +3,6 @@ package org.logdoc.fairhttp.service.api.helpers.endpoint;
 import org.logdoc.fairhttp.service.http.Request;
 import org.logdoc.fairhttp.service.http.Response;
 import org.logdoc.helpers.gears.Pair;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.util.Map;
 import java.util.Objects;
@@ -15,14 +13,12 @@ import java.util.function.BiFunction;
  * 14.02.2023 14:31
  * FairHttpService ☭ sweat and blood
  */
-public class Endpoint implements Comparable<Endpoint> {
-    private static final Logger preLogger = LoggerFactory.getLogger("PreFilters");
-
+public class Route implements Comparable<Route> {
     private final String method;
     private final Signature signature;
     private final BiFunction<Request, Map<String, String>, Response> invoker;
 
-    public Endpoint(final String method, final Signature signature, final BiFunction<Request, Map<String, String>, Response> invoker) {
+    public Route(final String method, final Signature signature, final BiFunction<Request, Map<String, String>, Response> invoker) {
         this.method = method;
         this.signature = signature;
         this.invoker = invoker;
@@ -38,7 +34,7 @@ public class Endpoint implements Comparable<Endpoint> {
     }
 
     @Override
-    public int compareTo(final Endpoint o) {
+    public int compareTo(final Route o) {
         final int res = method.compareTo(o.method);
 
         return res == 0 ? signature.compareTo(o.signature) : res;
@@ -48,8 +44,8 @@ public class Endpoint implements Comparable<Endpoint> {
     public boolean equals(final Object o) {
         if (this == o) return true;
         if (o == null || getClass() != o.getClass()) return false;
-        final Endpoint endpoint = (Endpoint) o;
-        return method.equals(((Endpoint) o).method) && signature.equals(endpoint.signature);
+        final Route route = (Route) o;
+        return method.equals(((Route) o).method) && signature.equals(route.signature);
     }
 
     public boolean equals(final String method, final String signature) {

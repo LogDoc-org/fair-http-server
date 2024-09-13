@@ -1,6 +1,8 @@
 package org.logdoc.fairhttp.service.api;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import org.logdoc.fairhttp.service.api.helpers.Endpoint;
+import org.logdoc.fairhttp.service.api.helpers.Singleton;
 import org.logdoc.fairhttp.service.http.Response;
 import org.logdoc.fairhttp.service.http.statics.DirectRead;
 import org.logdoc.helpers.std.MimeType;
@@ -19,14 +21,46 @@ import static org.logdoc.helpers.std.MimeTypes.*;
  * 03.02.2023 14:10
  * FairHttpService ☭ sweat and blood
  */
-public class Controller {
-    private static final Logger logger = LoggerFactory.getLogger(Controller.class);
+public abstract class Controller implements Singleton {
+    protected static final Logger logger = LoggerFactory.getLogger(Controller.class);
 
-    public static Response ok() {
+    protected Response created() {
+        return Response.Created();
+    }
+
+    protected Response noContent() {
+        return Response.NoContent();
+    }
+
+    protected Response notFound() {
+        return Response.NotFound();
+    }
+
+    protected Response notFound(final String message) {
+        return Response.NotFound(message);
+    }
+
+    protected Response forbidden() {
+        return Response.Forbidden();
+    }
+
+    protected Response serverError() {
+        return Response.ServerError();
+    }
+
+    protected Response serverError(final String reason) {
+        return Response.ServerError(reason);
+    }
+
+    protected Response clientError(final String reason) {
+        return Response.ClientError(reason);
+    }
+
+    protected Response ok() {
         return Response.Ok();
     }
 
-    public static Response ok(final JsonNode json) {
+    protected Response ok(final JsonNode json) {
         final Response response = Response.Ok();
 
         response.setPayload(json.toString().getBytes(StandardCharsets.UTF_8), JSON);
@@ -34,7 +68,7 @@ public class Controller {
         return response;
     }
 
-    public static Response ok(final Path p) {
+    protected Response ok(final Path p) {
         try {
             if (!Files.exists(p)) {
                 logger.error("Path not found: " + p);
@@ -56,15 +90,15 @@ public class Controller {
         }
     }
 
-    public static Response ok(final String data) {
+    protected Response ok(final String html) {
         final Response response = Response.Ok();
 
-        response.setPayload(data.getBytes(StandardCharsets.UTF_8), TEXTHTML);
+        response.setPayload(html.getBytes(StandardCharsets.UTF_8), TEXTHTML);
 
         return response;
     }
 
-    public static Response okText(final String data) {
+    protected Response okText(final String data) {
         final Response response = Response.Ok();
 
         response.setPayload(data.getBytes(StandardCharsets.UTF_8), TEXTPLAIN);
@@ -72,15 +106,16 @@ public class Controller {
         return response;
     }
 
-    public static Response ok(final byte[] bytes) {
+    protected Response ok(final byte[] bytes) {
         final Response response = Response.Ok();
 
-        response.setPayload(bytes, BINARY);
+        if (bytes != null)
+            response.setPayload(bytes, BINARY);
 
         return response;
     }
 
-    public static Response status(final int code, final String message) {
+    protected Response status(final int code, final String message) {
         return new Response(code, message);
     }
 }

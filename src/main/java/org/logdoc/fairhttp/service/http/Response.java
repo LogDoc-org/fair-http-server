@@ -19,11 +19,11 @@ import java.util.Map;
 import java.util.Set;
 import java.util.function.Consumer;
 
-import static org.logdoc.fairhttp.service.api.Controller.ok;
 import static org.logdoc.fairhttp.service.http.RFC.FEED;
 import static org.logdoc.fairhttp.service.http.RFC.PROTO;
 import static org.logdoc.helpers.Texts.isEmpty;
 import static org.logdoc.helpers.Texts.notNull;
+import static org.logdoc.helpers.std.MimeTypes.JSON;
 
 /**
  * @author Denis Danilin | me@loslobos.ru
@@ -41,7 +41,7 @@ public class Response extends MapAttributed {
 
     private Response() {
         headers = new HashMap<>(2);
-        headers.put("Server", "FairHttpServer/2.0.10");
+        headers.put("Server", "FairHttpServer/2.0.14");
         headers.put("Connection", "keep-alive");
 
         cookies = new HashSet<>(2);
@@ -51,10 +51,6 @@ public class Response extends MapAttributed {
         this();
         this.code = code;
         this.message = message;
-    }
-
-    public static Response jsonSuccess() {
-        return ok(Json.newObject().put("success", true));
     }
 
     public static Response Ok() {
