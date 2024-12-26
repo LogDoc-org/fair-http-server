@@ -9,14 +9,14 @@ import org.apache.ibatis.session.SqlSessionFactory;
 import org.apache.ibatis.session.SqlSessionFactoryBuilder;
 import org.apache.ibatis.session.SqlSessionManager;
 import org.apache.ibatis.transaction.jdbc.JdbcTransactionFactory;
-import org.graalvm.collections.Pair;
 import org.logdoc.fairhttp.service.api.helpers.EagerSingleton;
-import org.logdoc.fairhttp.service.api.helpers.Preloaded;
 import org.logdoc.fairhttp.service.api.helpers.Endpoint;
+import org.logdoc.fairhttp.service.api.helpers.Preloaded;
 import org.logdoc.fairhttp.service.api.helpers.Singleton;
 import org.logdoc.fairhttp.service.http.Request;
 import org.logdoc.fairhttp.service.http.Response;
 import org.logdoc.fairhttp.service.http.Server;
+import org.logdoc.helpers.gears.Pair;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -57,7 +57,7 @@ public final class DI {
     }
 
     public static void endpoints(final String groupPrefix, final Pair<BiFunction<Request, Map<String, String>, Boolean>, Response> groupBreaker, final Endpoint... endpoints) {
-        if (groupBreaker == null || groupBreaker.getLeft() == null || groupBreaker.getRight() == null) {
+        if (groupBreaker == null || groupBreaker.first == null || groupBreaker.second == null) {
             endpoints(groupPrefix, endpoints);
             return;
         }
@@ -65,7 +65,7 @@ public final class DI {
         if (endpoints == null || endpoints.length == 0)
             return;
 
-        Arrays.stream(endpoints).forEach(e -> e.breakIf(groupBreaker.getLeft(), groupBreaker.getRight()));
+        Arrays.stream(endpoints).forEach(e -> e.breakIf(groupBreaker.first, groupBreaker.second));
         endpoints(groupPrefix, endpoints);
     }
 
