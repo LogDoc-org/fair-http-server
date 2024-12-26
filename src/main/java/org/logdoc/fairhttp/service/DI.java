@@ -9,11 +9,13 @@ import org.apache.ibatis.session.SqlSessionFactory;
 import org.apache.ibatis.session.SqlSessionFactoryBuilder;
 import org.apache.ibatis.session.SqlSessionManager;
 import org.apache.ibatis.transaction.jdbc.JdbcTransactionFactory;
+import org.graalvm.collections.Pair;
 import org.logdoc.fairhttp.service.api.helpers.EagerSingleton;
 import org.logdoc.fairhttp.service.api.helpers.Preloaded;
 import org.logdoc.fairhttp.service.api.helpers.Endpoint;
 import org.logdoc.fairhttp.service.api.helpers.Singleton;
 import org.logdoc.fairhttp.service.http.Request;
+import org.logdoc.fairhttp.service.http.Response;
 import org.logdoc.fairhttp.service.http.Server;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -24,6 +26,7 @@ import java.lang.reflect.Modifier;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
+import java.util.function.BiFunction;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
@@ -51,6 +54,19 @@ public final class DI {
         knownConstructors = new HashMap<>();
         singleMap = new HashMap<>();
         eagers = new HashSet<>(8);
+    }
+
+    public static void endpoints(final String groupPrefix, final Pair<BiFunction<Request, Map<String, String>, Boolean>, Response> groupBreaker, final Endpoint... endpoints) {
+        if (groupBreaker == null || groupBreaker.getLeft() == null || groupBreaker.getRight() == null) {
+            endpoints(groupPrefix, endpoints);
+            return;
+        }
+
+        if (endpoints == null || endpoints.length == 0)
+            return;
+
+        Arrays.stream(endpoints).forEach(e -> e.breakIf(groupBreaker.getLeft(), groupBreaker.getRight()));
+        endpoints(groupPrefix, endpoints);
     }
 
     public static void endpoints(final String groupPrefix, final Endpoint... endpoints) {
