@@ -219,7 +219,7 @@ public class Server implements RCBackup {
             }
 
             if (match.second && id.method.equals("OPTIONS")) {
-                mappableResponse = cors.wrap(headers, Response.NoContent());
+                mappableResponse = Response.NoContent();
                 break;
             }
         }
@@ -237,7 +237,7 @@ public class Server implements RCBackup {
             return;
         }
 
-        writeResponse(mappableResponse, rc);
+        writeResponse(cors.wrap(headers, mappableResponse), rc);
     }
 
     private void writeResponse(final Response response, final ResourceConnect rc) {

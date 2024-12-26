@@ -31,7 +31,7 @@ class CORS {
             HeadersRequest = "Access-control-request-headers";
 
     private final String originStr, methodsStr, headersStr, allowCreds, exposeStr;
-    private final boolean noWilds, multiOrigins;
+    private final boolean noWilds, multiOrigins, off;
 
 
     CORS(final Config config) {
@@ -56,6 +56,8 @@ class CORS {
         multiOrigins = originStr.contains(",");
 
         this.allowCreds = String.valueOf(allowCreds);
+
+        this.off = cors != null && cors.hasPath("off") && cors.getBoolean("off");
     }
 
     private void setCorsValues(final Config cors, final String path, final Set<String> target) {
@@ -70,7 +72,10 @@ class CORS {
             }
     }
 
-    Response wrap(final Map<String, String> headers, Response response) {
+    Response wrap(final Map<String, String> headers, final Response response) {
+        if (off)
+            return response;
+
         if (multiOrigins)
             response.header("Vary", "origin"); // multiple origins must be noted
 
