@@ -53,6 +53,19 @@ public final class DI {
         eagers = new HashSet<>(8);
     }
 
+    public static void endpoints(final String groupPrefix, final Endpoint... endpoints) {
+        if (isEmpty(groupPrefix) || !groupPrefix.startsWith("/")) {
+            endpoints(endpoints);
+            return;
+        }
+
+        if (endpoints == null || endpoints.length == 0)
+            return;
+
+        Arrays.stream(endpoints).forEach(e -> e.endpoint = groupPrefix + e.endpoint);
+        endpoints(endpoints);
+    }
+
     public static void endpoints(final Endpoint... endpoints) {
         if (endpoints == null || endpoints.length == 0)
             return;

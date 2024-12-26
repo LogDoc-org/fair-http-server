@@ -17,7 +17,7 @@ import static org.logdoc.helpers.Texts.notNull;
  */
 public class Endpoint {
     public final String method;
-    public final String endpoint;
+    public String endpoint;
     public final boolean indirect;
     public final BiFunction<Request, Map<String, String>, ?> callback;
     public Response breakWithResponse;
