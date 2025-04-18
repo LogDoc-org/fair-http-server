@@ -39,7 +39,7 @@ public class Response extends MapAttributed {
 
     private Response() {
         headers = new HashMap<>(2);
-        headers.put("Server", "FairHttpServer/2.0.20");
+        headers.put("Server", "FairHttpServer/2.0.22");
         headers.put("Connection", "keep-alive");
 
         cookies = new HashSet<>(2);
