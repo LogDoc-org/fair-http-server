@@ -3,7 +3,9 @@ package org.logdoc.fairhttp.service.tools;
 import org.logdoc.helpers.Texts;
 import org.logdoc.helpers.std.MimeType;
 
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 import static org.logdoc.helpers.std.MimeTypes.BINARY;
@@ -14,33 +16,46 @@ import static org.logdoc.helpers.std.MimeTypes.TEXTPLAIN;
  * 02.03.2023 14:11
  * FairHttpService ☭ sweat and blood
  */
-public class MultiForm extends HashMap<String, MultiForm.Part> implements FieldForm {
+public class MultiForm implements FieldForm {
+    private final Map<String, List<String>> fields = new HashMap<>();
+    private final Map<String, List<Part>> parts = new HashMap<>();
+
     @Override
     public String field(final String name) {
-        final Part o = get(name);
+        return fields.containsKey(name) ? fields.get(name).get(0) : null;
+    }
 
-        return o == null ? null : o.value;
+    public List<String> fields(final String name) {
+        return fields.get(name);
+    }
+
+    public Part get(final String name) {
+        return parts.containsKey(name) ? parts.get(name).get(0) : null;
+    }
+
+    public List<Part> look(final String name) {
+        return parts.get(name);
     }
 
     public void binData(final String name, final byte[] data, final Map<String, String> headers) {
         if (Texts.isEmpty(name))
             return;
 
-        put(name, new Part(null, data, BINARY, headers));
+        parts.putIfAbsent(name, new ArrayList<>(2)).add(new Part(null, data, BINARY, headers));
     }
 
     public void textData(final String name, final String value) {
         if (Texts.isEmpty(name))
             return;
 
-        put(name, new Part(value, null, TEXTPLAIN, null));
+        fields.putIfAbsent(name, new ArrayList<>(2)).add(value);
     }
 
     public void fileData(final String name, final String fileName, final byte[] data, final MimeType contentType) {
         if (Texts.isEmpty(name))
             return;
 
-        put(name, new Part(fileName, data, contentType == null ? BINARY : contentType, null));
+        parts.putIfAbsent(name, new ArrayList<>(2)).add(new Part(null, data, contentType == null ? BINARY : contentType, null));
     }
 
     public static class Part {
