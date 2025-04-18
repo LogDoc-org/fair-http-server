@@ -55,7 +55,7 @@ public class MultiForm implements FieldForm {
         if (Texts.isEmpty(name))
             return;
 
-        parts.putIfAbsent(name, new ArrayList<>(2)).add(new Part(null, data, contentType == null ? BINARY : contentType, null));
+        parts.putIfAbsent(name, new ArrayList<>(2)).add(new Part(fileName, data, contentType == null ? BINARY : contentType, null));
     }
 
     public static class Part {

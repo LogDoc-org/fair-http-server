@@ -1,7 +1,6 @@
 package org.logdoc.fairhttp.service.http;
 
 import org.logdoc.fairhttp.service.api.helpers.Headers;
-import org.logdoc.fairhttp.service.tools.Json;
 import org.logdoc.fairhttp.service.tools.MapAttributed;
 import org.logdoc.fairhttp.service.tools.PhasedConsumer;
 import org.logdoc.helpers.std.MimeType;
@@ -23,7 +22,6 @@ import static org.logdoc.fairhttp.service.http.RFC.FEED;
 import static org.logdoc.fairhttp.service.http.RFC.PROTO;
 import static org.logdoc.helpers.Texts.isEmpty;
 import static org.logdoc.helpers.Texts.notNull;
-import static org.logdoc.helpers.std.MimeTypes.JSON;
 
 /**
  * @author Denis Danilin | me@loslobos.ru
@@ -41,7 +39,7 @@ public class Response extends MapAttributed {
 
     private Response() {
         headers = new HashMap<>(2);
-        headers.put("Server", "FairHttpServer/2.0.14");
+        headers.put("Server", "FairHttpServer/2.0.20");
         headers.put("Connection", "keep-alive");
 
         cookies = new HashSet<>(2);
