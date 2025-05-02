@@ -41,21 +41,24 @@ public class MultiForm implements FieldForm {
         if (Texts.isEmpty(name))
             return;
 
-        parts.putIfAbsent(name, new ArrayList<>(2)).add(new Part(null, data, BINARY, headers));
+        parts.putIfAbsent(name, new ArrayList<>(2));
+	parts.get(name).add(new Part(null, data, BINARY, headers));
     }
 
     public void textData(final String name, final String value) {
         if (Texts.isEmpty(name))
             return;
 
-        fields.putIfAbsent(name, new ArrayList<>(2)).add(value);
+        fields.putIfAbsent(name, new ArrayList<>(2));
+	fields.get(name).add(value);
     }
 
     public void fileData(final String name, final String fileName, final byte[] data, final MimeType contentType) {
         if (Texts.isEmpty(name))
             return;
 
-        parts.putIfAbsent(name, new ArrayList<>(2)).add(new Part(fileName, data, contentType == null ? BINARY : contentType, null));
+        parts.putIfAbsent(name, new ArrayList<>(2));
+	parts.get(name).add(new Part(fileName, data, contentType == null ? BINARY : contentType, null));
     }
 
     public static class Part {
