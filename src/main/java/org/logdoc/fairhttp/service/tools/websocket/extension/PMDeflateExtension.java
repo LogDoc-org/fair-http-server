@@ -15,10 +15,10 @@ public class PMDeflateExtension extends CompressionExtension {
     private static final String EXTENSION_REGISTERED_NAME = "permessage-deflate"; // https://tools.ietf.org/html/rfc7692#section-9
     private static final String SERVER_NO_CONTEXT_TAKEOVER = "server_no_context_takeover";
     private static final String CLIENT_NO_CONTEXT_TAKEOVER = "client_no_context_takeover";
-    private static final String SERVER_MAX_WINDOW_BITS = "server_max_window_bits";
-    private static final String CLIENT_MAX_WINDOW_BITS = "client_max_window_bits";
-    private static final int serverMaxWindowBits = 1 << 15;
-    private static final int clientMaxWindowBits = 1 << 15;
+    // private static final String SERVER_MAX_WINDOW_BITS = "server_max_window_bits";
+    // private static final String CLIENT_MAX_WINDOW_BITS = "client_max_window_bits";
+    // private static final int serverMaxWindowBits = 1 << 15;
+    // private static final int clientMaxWindowBits = 1 << 15;
     private static final byte[] TAIL_BYTES = {(byte) 0x00, (byte) 0x00, (byte) 0xFF, (byte) 0xFF};
     private static final int BUFFER_SIZE = 1 << 10;
 

@@ -1,6 +1,5 @@
 package org.logdoc.fairhttp.service.http.statics;
 
-import org.apache.ibatis.type.NStringTypeHandler;
 import org.logdoc.fairhttp.service.http.Response;
 
 import java.util.function.Function;

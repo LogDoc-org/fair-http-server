@@ -1,7 +1,6 @@
 package org.logdoc.fairhttp.service.api;
 
 import com.fasterxml.jackson.databind.JsonNode;
-import org.logdoc.fairhttp.service.api.helpers.Endpoint;
 import org.logdoc.fairhttp.service.api.helpers.Singleton;
 import org.logdoc.fairhttp.service.http.Response;
 import org.logdoc.fairhttp.service.http.statics.DirectRead;

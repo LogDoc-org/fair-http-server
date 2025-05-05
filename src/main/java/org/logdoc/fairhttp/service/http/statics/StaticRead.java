@@ -19,7 +19,6 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.*;
-import java.util.function.Function;
 
 import static org.logdoc.fairhttp.service.tools.ConfigTools.*;
 import static org.logdoc.helpers.Texts.isEmpty;

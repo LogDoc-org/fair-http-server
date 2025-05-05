@@ -9,7 +9,6 @@ import java.util.List;
 import java.util.Map;
 
 import static org.logdoc.helpers.std.MimeTypes.BINARY;
-import static org.logdoc.helpers.std.MimeTypes.TEXTPLAIN;
 
 /**
  * @author Denis Danilin | me@loslobos.ru

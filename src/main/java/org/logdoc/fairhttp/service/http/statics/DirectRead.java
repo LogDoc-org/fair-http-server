@@ -53,19 +53,35 @@ public class DirectRead extends StaticRead {
     }
 
     public static Response fileResponse(final Path p, final String mimeType, final long size) {
+        return fileResponseWithTransferTo(p, mimeType, size);
+    }
+
+    /**
+     * Creates a response that efficiently serves a file using FileChannel.transferTo()
+     * for zero-copy file transfer, which is more efficient for large files.
+     */
+    public static Response fileResponseWithTransferTo(final Path p, final String mimeType, final long size) {
         final Response response = Response.Ok();
         response.header(Headers.ContentType, mimeType);
         response.header(Headers.ContentLength, size);
+        
         response.setPromise(os -> {
-            final byte[] buf = new byte[1024 * 640];
-            int read;
-
-            try (final InputStream is = Files.newInputStream(p)) {
-                while ((read = is.read(buf)) != -1)
-                    os.write(buf, 0, read);
+            try (var fileChannel = java.nio.channels.FileChannel.open(p, java.nio.file.StandardOpenOption.READ)) {
+                long position = 0;
+                long remaining = size;
+                
+                while (remaining > 0) {
+                    long transferred = fileChannel.transferTo(position, remaining, java.nio.channels.Channels.newChannel(os));
+                    if (transferred <= 0) {
+                        break; // No bytes transferred, we're done or an error occurred
+                    }
+                    position += transferred;
+                    remaining -= transferred;
+                }
                 os.flush();
             } catch (final Exception e) {
-                logger.error(p + " :: " + e.getMessage(), e);
+                logger.error("Error transferring file " + p + ": " + e.getMessage(), e);
+                throw new RuntimeException("Failed to transfer file", e);
             }
         });
 
@@ -180,21 +196,7 @@ public class DirectRead extends StaticRead {
 
                 long size = Files.size(p);
 
-                response = Response.Ok();
-                response.header(Headers.ContentType, mime);
-                response.header(Headers.ContentLength, size);
-                response.setPromise(os -> {
-                    final byte[] buf = new byte[1024 * 640];
-                    int read;
-
-                    try (final InputStream is = Files.newInputStream(p)) {
-                        while ((read = is.read(buf)) != -1)
-                            os.write(buf, 0, read);
-                        os.flush();
-                    } catch (final Exception e) {
-                        logger.error(p + " :: " + e.getMessage(), e);
-                    }
-                });
+                response = fileResponseWithTransferTo(p, mime, size);
             }
 
 
