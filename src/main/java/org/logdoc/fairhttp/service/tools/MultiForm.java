@@ -15,18 +15,8 @@ import static org.logdoc.helpers.std.MimeTypes.BINARY;
  * 02.03.2023 14:11
  * FairHttpService ☭ sweat and blood
  */
-public class MultiForm implements FieldForm {
-    private final Map<String, List<String>> fields = new HashMap<>();
+public class MultiForm extends Form implements FieldForm {
     private final Map<String, List<Part>> parts = new HashMap<>();
-
-    @Override
-    public String field(final String name) {
-        return fields.containsKey(name) ? fields.get(name).get(0) : null;
-    }
-
-    public List<String> fields(final String name) {
-        return fields.get(name);
-    }
 
     public Part get(final String name) {
         return parts.containsKey(name) ? parts.get(name).get(0) : null;
@@ -41,15 +31,15 @@ public class MultiForm implements FieldForm {
             return;
 
         parts.putIfAbsent(name, new ArrayList<>(2));
-	parts.get(name).add(new Part(null, data, BINARY, headers));
+        parts.get(name).add(new Part(null, data, BINARY, headers));
     }
 
     public void textData(final String name, final String value) {
         if (Texts.isEmpty(name))
             return;
 
-        fields.putIfAbsent(name, new ArrayList<>(2));
-	fields.get(name).add(value);
+        putIfAbsent(name, new ArrayList<>(2));
+        super.get(name).add(value);
     }
 
     public void fileData(final String name, final String fileName, final byte[] data, final MimeType contentType) {
@@ -57,7 +47,7 @@ public class MultiForm implements FieldForm {
             return;
 
         parts.putIfAbsent(name, new ArrayList<>(2));
-	parts.get(name).add(new Part(fileName, data, contentType == null ? BINARY : contentType, null));
+        parts.get(name).add(new Part(fileName, data, contentType == null ? BINARY : contentType, null));
     }
 
     public static class Part {

@@ -6,10 +6,7 @@ import org.logdoc.fairhttp.service.api.helpers.endpoint.Route;
 import org.logdoc.fairhttp.service.api.helpers.endpoint.Signature;
 import org.logdoc.fairhttp.service.api.helpers.endpoint.invokers.*;
 import org.logdoc.fairhttp.service.http.statics.AssetsRead;
-import org.logdoc.fairhttp.service.http.statics.BundledRead;
-import org.logdoc.fairhttp.service.http.statics.DirectRead;
 import org.logdoc.fairhttp.service.http.statics.NoStatics;
-import org.logdoc.fairhttp.service.tools.ConfigPath;
 import org.logdoc.fairhttp.service.tools.ConfigTools;
 import org.logdoc.fairhttp.service.tools.ResourceConnect;
 import org.logdoc.helpers.gears.Pair;
@@ -19,15 +16,11 @@ import org.slf4j.LoggerFactory;
 import java.net.Inet4Address;
 import java.net.ServerSocket;
 import java.net.Socket;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
-import static org.logdoc.fairhttp.service.http.statics.BundledRead.PlaceHolder;
 import static org.logdoc.helpers.Digits.getInt;
 import static org.logdoc.helpers.Texts.isEmpty;
 import static org.logdoc.helpers.Texts.notNull;
@@ -39,73 +32,54 @@ import static org.logdoc.helpers.Texts.notNull;
  */
 public class Server implements RCBackup {
     private static final Logger logger = LoggerFactory.getLogger(Server.class);
-    private static Server backRef = null;
     private final SortedSet<Route> routes;
     private final int port, maxRequestBytes;
-    private final int readTimeout, execTimeout;
+    private final int readTimeoutMs, execTimeoutSeconds;
     private final AssetsRead assets;
     private final CORS cors;
     private final Map<Integer, String> maps;
     private final ExecutorService executorService;
+
     private Function<Throwable, Response> errorHandler;
 
-    public Server(final int port, final int maxRequestBytes) { // minimal
-        this.port = port;
-        this.maxRequestBytes = maxRequestBytes;
-        this.readTimeout = 15000;
-        this.execTimeout = 180;
-        this.routes = new TreeSet<>();
+    public Server(final int port, final int maxRequestBytes, final int readTimeoutMs, final int execTimeoutSeconds, final CORS cors, final AssetsRead assets) {
+        executorService = new ThreadPoolExecutor(
+                Runtime.getRuntime().availableProcessors(),     // Core pool size
+                Runtime.getRuntime().availableProcessors() * 2, // Max pool size
+                60L, TimeUnit.SECONDS,                          // Keep-alive time
+                new LinkedBlockingQueue<>(1000),        // Work queue
+                new ThreadPoolExecutor.CallerRunsPolicy()       // Rejection policy
+        );
+        routes = new TreeSet<>();
         maps = new HashMap<>(0);
 
-        assets = new NoStatics();
-        cors = new CORS(null);
-
+        this.port = port;
+        this.maxRequestBytes = maxRequestBytes;
+        this.readTimeoutMs = readTimeoutMs;
+        this.execTimeoutSeconds = execTimeoutSeconds;
+        this.cors = cors;
+        this.assets = assets;
         errorHandler = throwable -> {
             if (throwable != null)
                 logger.error(throwable.getMessage(), throwable);
 
             return throwable == null ? Response.ServerError() : Response.ServerError(throwable.getMessage());
         };
+    }
 
-        executorService = Executors.newCachedThreadPool();
+    public Server(final int port, final int maxRequestBytes) { // minimal
+        this(port, maxRequestBytes, 15000, 180, new CORS(null), new NoStatics());
     }
 
     public Server(final Config config) {
-        synchronized (Server.class) {
-            if (backRef != null)
-                throw new IllegalStateException("Only one instance can be started");
-
-            backRef = this;
-        }
-
-        port = config.getInt(ConfigPath.PORT);
-        maxRequestBytes = config.getBytes(ConfigPath.MAX_REQUEST).intValue();
-        readTimeout = config.getInt(ConfigPath.READ_TIMEOUT);
-        execTimeout = config.getInt(ConfigPath.EXEC_TIMEOUT);
-        maps = new HashMap<>(0);
-
-        this.routes = new TreeSet<>();
-
-        final Config staticsCfg = ConfigTools.sureConf(config, "fair.http.statics");
-        final String dir = staticsCfg != null && staticsCfg.hasPath("root") && !staticsCfg.getIsNull("root") ? notNull(staticsCfg.getString("root")) : null;
-
-        AssetsRead assets0 = new NoStatics();
-
-        try {
-            if (!isEmpty(dir)) {
-                if (dir.startsWith(PlaceHolder))
-                    assets0 = new BundledRead(staticsCfg, dir);
-                else {
-                    final Path p = Paths.get(dir);
-                    if (Files.exists(p) && Files.isDirectory(p))
-                        assets0 = new DirectRead(staticsCfg, dir);
-                }
-            } else
-                logger.debug("No statics: dir is empty `" + dir + "`");
-        } catch (final IllegalStateException ise) {
-            logger.error("Cant setup static assets: " + ise.getMessage() + ", noop.");
-            assets0 = new NoStatics();
-        }
+        this(
+                config.getInt("fair.http.port"),
+                config.getBytes("fair.http.max_request_body").intValue(),
+                config.getInt("fair.http.request_read_timeout_ms"),
+                config.getInt("fair.http.handler_exec_timeout_sec"),
+                new CORS(ConfigTools.sureConf(config, "fair.http.cors")),
+                AssetsRead.ofConfig(ConfigTools.sureConf(config, "fair.http.statics"))
+        );
 
         if (config.hasPath("fair.http"))
             try {
@@ -139,12 +113,6 @@ public class Server implements RCBackup {
             } catch (final Exception e) {
                 logger.error("Cant setup code mappings: " + e.getMessage(), e);
             }
-
-        assets = assets0;
-
-        cors = new CORS(config);
-
-        executorService = Executors.newCachedThreadPool();
     }
 
     public void start() {
@@ -155,7 +123,7 @@ public class Server implements RCBackup {
                 Socket child;
 
                 while ((child = socket.accept()) != null)
-                    new RCWrap(child, maxRequestBytes, readTimeout, this);
+                    new RCWrap(child, maxRequestBytes, readTimeoutMs, this);
             } catch (final Exception e) {
                 logger.error(e.getMessage(), e);
                 System.exit(-1);
@@ -262,12 +230,12 @@ public class Server implements RCBackup {
 
                     if (unresolving) {
                         invoker = direct
-                                ? new DirectUnresolvingInvoker(argued.invMethod, errorHandler, execTimeout)
-                                : new IndirectUnresolvingInvoker(argued.invMethod, errorHandler, execTimeout);
+                                ? new DirectUnresolvingInvoker(argued.invMethod, errorHandler, execTimeoutSeconds)
+                                : new IndirectUnresolvingInvoker(argued.invMethod, errorHandler, execTimeoutSeconds);
                     } else {
                         invoker = direct
-                                ? new DirectInvoker(argued.invMethod, Collections.unmodifiableList(argued.args.stream().map(arg -> arg.magic).collect(Collectors.toList())), errorHandler, execTimeout)
-                                : new IndirectInvoker(argued.invMethod, Collections.unmodifiableList(argued.args.stream().map(arg -> arg.magic).collect(Collectors.toList())), errorHandler, execTimeout);
+                                ? new DirectInvoker(argued.invMethod, Collections.unmodifiableList(argued.args.stream().map(arg -> arg.magic).collect(Collectors.toList())), errorHandler, execTimeoutSeconds)
+                                : new IndirectInvoker(argued.invMethod, Collections.unmodifiableList(argued.args.stream().map(arg -> arg.magic).collect(Collectors.toList())), errorHandler, execTimeoutSeconds);
                     }
 
                     final Route ep = new Route(argued.method, new Signature(argued.path), invoker);
@@ -291,7 +259,7 @@ public class Server implements RCBackup {
                                         return endpoint.breakWithResponse;
 
                                     try {
-                                        return ((CompletionStage<Response>) endpoint.callback.apply(req, pathMap)).toCompletableFuture().get(execTimeout, TimeUnit.SECONDS);
+                                        return ((CompletionStage<Response>) endpoint.callback.apply(req, pathMap)).toCompletableFuture().get(execTimeoutSeconds, TimeUnit.SECONDS);
                                     } catch (final InterruptedException | ExecutionException | TimeoutException e) {
                                         throw new RuntimeException(e);
                                     }
@@ -302,7 +270,7 @@ public class Server implements RCBackup {
 
                                     throw new RuntimeException(e);
                                 })
-                                .get(execTimeout, TimeUnit.SECONDS);
+                                .get(execTimeoutSeconds, TimeUnit.SECONDS);
                     } catch (final Exception ex) {
                         return errorHandler.apply(ex);
                     }
@@ -321,7 +289,7 @@ public class Server implements RCBackup {
 
                                     throw new RuntimeException(e);
                                 })
-                                .get(execTimeout, TimeUnit.SECONDS);
+                                .get(execTimeoutSeconds, TimeUnit.SECONDS);
                     } catch (final Exception ex) {
                         return errorHandler.apply(ex);
                     }

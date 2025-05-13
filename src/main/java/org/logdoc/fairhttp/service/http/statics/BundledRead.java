@@ -1,7 +1,6 @@
 package org.logdoc.fairhttp.service.http.statics;
 
 import com.typesafe.config.Config;
-import com.typesafe.config.ConfigException;
 import org.logdoc.fairhttp.service.api.helpers.Headers;
 import org.logdoc.fairhttp.service.http.Response;
 import org.logdoc.helpers.std.MimeType;
@@ -13,40 +12,24 @@ import java.io.InputStream;
 import java.net.URL;
 import java.time.LocalDateTime;
 
-import static org.logdoc.helpers.Texts.isEmpty;
-
 /**
  * @author Denis Danilin | me@loslobos.ru
  * 25.04.2023 11:44
  * fair-http-server ☭ sweat and blood
  */
 public class BundledRead extends StaticRead {
-    public static final String PlaceHolder = ":classpath:/";
     private static final Logger logger = LoggerFactory.getLogger(DirectRead.class);
     private final ClassLoader cl;
     private final String prefix;
 
-    public BundledRead(final Config staticsCfg, String prefix) {
+    BundledRead(final Config staticsCfg, final String prefix) {
         super(staticsCfg);
 
-        cl = BundledRead.class.getClassLoader();
+        this.cl = BundledRead.class.getClassLoader();
+        this.prefix = prefix;
 
-        try {
-            prefix = prefix.replace(PlaceHolder, "").trim();
-            if (isEmpty(prefix))
-                prefix = "/";
-            else if (!prefix.endsWith("/"))
-                prefix += "/";
-            this.prefix = prefix;
-        } catch (final ConfigException e) {
-            logger.error(e.getMessage(), e);
-            throw new IllegalStateException(e);
-        }
+        logger.info("Static bundled content root: " + prefix);
 
-        if (!this.prefix.equals("/") && cl.getResource(this.prefix) == null)
-            throw new IllegalStateException("Unknown static root resource: " + this.prefix);
-
-        logger.info("Static bundled content root: " + this.prefix);
         if (autoDirList)
             logger.warn("WARNING: Auto directory listing is disabled in bundled content.");
     }

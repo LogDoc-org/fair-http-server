@@ -9,8 +9,6 @@ import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-import static org.logdoc.fairhttp.service.tools.ConfigPath.CORS;
-import static org.logdoc.fairhttp.service.tools.ConfigPath.*;
 import static org.logdoc.helpers.Texts.isEmpty;
 import static org.logdoc.helpers.Texts.notNull;
 
@@ -19,7 +17,7 @@ import static org.logdoc.helpers.Texts.notNull;
  * 18.04.2023 10:59
  * fair-http-server ☭ sweat and blood
  */
-class CORS {
+public class CORS {
     private static final String OriginReply = "Access-Control-Allow-Origin",
             MethodReply = "Access-Control-Allow-Methods",
             HeadersReply = "Access-Control-Allow-Headers",
@@ -33,18 +31,15 @@ class CORS {
     private final String originStr, methodsStr, headersStr, allowCreds, exposeStr;
     private final boolean noWilds, multiOrigins, off;
 
-
-    CORS(final Config config) {
-        final Config cors = config != null && config.hasPath(CORS) ? config.getConfig(CORS) : null;
-
+    public CORS(final Config cors) {
         final Set<String> origins = new HashSet<>(), methods = new HashSet<>(), headers = new HashSet<>(), expose = new HashSet<>();
-        final boolean allowCreds = cors == null || cors.isEmpty() || !cors.hasPath(CORS_CREDS) || cors.getBoolean(CORS_CREDS);
+        final boolean allowCreds = cors == null || cors.isEmpty() || !cors.hasPath("allow_credentials") || cors.getBoolean("allow_credentials");
 
         if (cors != null && !cors.isEmpty()) {
-            setCorsValues(cors, CORS_ORIGINS, origins);
-            setCorsValues(cors, CORS_METHODS, methods);
-            setCorsValues(cors, CORS_HEADERS, headers);
-            setCorsValues(cors, CORS_EXPOSE, expose);
+            setCorsValues(cors, "origins", origins);
+            setCorsValues(cors, "methods", methods);
+            setCorsValues(cors, "headers", headers);
+            setCorsValues(cors, "expose", expose);
         }
 
         originStr = notNull(isEmpty(origins) ? "*" : origins.stream().map(String::trim).filter(s -> !isEmpty(s)).collect(Collectors.joining(", ")), "*");
@@ -72,7 +67,7 @@ class CORS {
             }
     }
 
-    Response wrap(final Map<String, String> headers, final Response response) {
+    public Response wrap(final Map<String, String> headers, final Response response) {
         if (off)
             return response;
 

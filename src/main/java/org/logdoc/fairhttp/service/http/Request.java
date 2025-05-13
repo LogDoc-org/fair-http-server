@@ -15,11 +15,13 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.net.Socket;
 import java.net.SocketAddress;
-import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
-import java.util.*;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.regex.Pattern;
 import java.util.zip.GZIPInputStream;
 import java.util.zip.InflaterInputStream;
@@ -191,27 +193,7 @@ public class Request extends MapAttributed {
         if (bf != null)
             return bf;
 
-        bf = new Form();
-        final String bs = bodyString();
-
-        Arrays.stream(bs.split(Pattern.quote("&")))
-                .map(pair -> pair.split(Pattern.quote("="), 2))
-                .forEach(kv -> {
-                    if (kv.length == 2)
-                        try {
-                            final String key = notNull(kv[0]),
-                                    val = URLDecoder.decode(kv[1], StandardCharsets.UTF_8);
-
-                            if (!isEmpty(val)) {
-                                bf.putIfAbsent(key, new ArrayList<>(2));
-                                bf.get(key).add(val);
-                            }
-                        } catch (final Exception e) {
-                            logger.error(e.getMessage(), e);
-                        }
-                });
-
-        return bf;
+        return (bf = new Form(bodyBytes()));
     }
 
     public MultiForm bodyMultiForm() throws BodyReadError {

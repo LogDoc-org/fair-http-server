@@ -1,7 +1,6 @@
 package org.logdoc.fairhttp.service.http.statics;
 
 import com.typesafe.config.Config;
-import com.typesafe.config.ConfigException;
 import org.logdoc.fairhttp.service.api.helpers.Headers;
 import org.logdoc.fairhttp.service.http.Response;
 import org.logdoc.fairhttp.service.tools.PhasedConsumer;
@@ -13,10 +12,12 @@ import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.nio.channels.Channels;
+import java.nio.channels.FileChannel;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.Paths;
+import java.nio.file.StandardOpenOption;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.Objects;
@@ -36,19 +37,10 @@ public class DirectRead extends StaticRead {
 
     private final Path root;
 
-    public DirectRead(final Config staticsCfg, final String root) {
+    DirectRead(final Config staticsCfg, final Path root) {
         super(staticsCfg);
 
-        try {
-            this.root = Paths.get(root);
-        } catch (final ConfigException e) {
-            logger.error(e.getMessage(), e);
-            throw new IllegalStateException(e);
-        }
-
-        if (!Files.exists(this.root))
-            throw new IllegalStateException("root dir doesnt exists");
-
+        this.root = root;
         logger.info("Static content root dir: " + this.root);
     }
 
@@ -56,28 +48,25 @@ public class DirectRead extends StaticRead {
         return fileResponseWithTransferTo(p, mimeType, size);
     }
 
-    /**
-     * Creates a response that efficiently serves a file using FileChannel.transferTo()
-     * for zero-copy file transfer, which is more efficient for large files.
-     */
     public static Response fileResponseWithTransferTo(final Path p, final String mimeType, final long size) {
         final Response response = Response.Ok();
         response.header(Headers.ContentType, mimeType);
         response.header(Headers.ContentLength, size);
-        
+
         response.setPromise(os -> {
-            try (var fileChannel = java.nio.channels.FileChannel.open(p, java.nio.file.StandardOpenOption.READ)) {
+            try (var fileChannel = FileChannel.open(p, StandardOpenOption.READ); var outChan = Channels.newChannel(os)) {
                 long position = 0;
                 long remaining = size;
-                
+
                 while (remaining > 0) {
-                    long transferred = fileChannel.transferTo(position, remaining, java.nio.channels.Channels.newChannel(os));
-                    if (transferred <= 0) {
-                        break; // No bytes transferred, we're done or an error occurred
-                    }
+                    long transferred = fileChannel.transferTo(position, remaining, outChan);
+                    if (transferred <= 0)
+                        break;
+
                     position += transferred;
                     remaining -= transferred;
                 }
+
                 os.flush();
             } catch (final Exception e) {
                 logger.error("Error transferring file " + p + ": " + e.getMessage(), e);
@@ -139,7 +128,8 @@ public class DirectRead extends StaticRead {
                                             try {
                                                 final FRes fr = new FRes();
                                                 fr.isFile = !Files.isDirectory(f);
-                                                fr.time = LocalDateTime.from(Files.getLastModifiedTime(f).toInstant().atZone(ZoneId.systemDefault()));
+                                                fr.time = LocalDateTime.from(Files.getLastModifiedTime(f).toInstant()
+                                                        .atZone(ZoneId.systemDefault()));
                                                 fr.name = f.getFileName().toString();
                                                 fr.size = fr.isFile ? Files.size(f) : 0;
 
@@ -198,7 +188,6 @@ public class DirectRead extends StaticRead {
 
                 response = fileResponseWithTransferTo(p, mime, size);
             }
-
 
             if (response.is200())
                 cacheMe(webpath, response);
